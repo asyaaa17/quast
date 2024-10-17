@@ -137,7 +137,7 @@ class MergedAlignment(Alignment):
         self.label = label  
         self.segments = [(self.start, self.end)]  
 
-def merge_blocks_within_contig(blocks, threshold=1000, filter_length=5000):
+def merge_blocks_within_contig(blocks, threshold=1000, filter_length=10000):
     blocks.sort(key=lambda x: x.start)
     
     merged_blocks = []
