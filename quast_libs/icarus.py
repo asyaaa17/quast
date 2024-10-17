@@ -1,12 +1,5 @@
 #!/usr/bin/python -O
 
-############################################################################
-# Copyright (c) 2015-2022 Saint Petersburg State University
-# Copyright (c) 2011-2015 Saint Petersburg Academic University
-# All Rights Reserved
-# See file LICENSE for details.
-############################################################################
-
 from __future__ import with_statement
 
 from quast_libs.icarus_builder import prepare_alignment_data_for_one_ref, save_alignment_data_for_one_ref, save_contig_size_html, \
@@ -14,12 +7,12 @@ from quast_libs.icarus_builder import prepare_alignment_data_for_one_ref, save_a
 from quast_libs.icarus_parser import parse_contigs_fpath, parse_features_data, parse_cov_fpath, parse_genes_data
 from quast_libs.icarus_parser import parse_aligner_contig_report
 from quast_libs.icarus_utils import make_output_dir, group_references, format_cov_data, format_long_numbers, get_info_by_chr, \
-    get_assemblies, check_misassembled_blocks, Alignment  # Импортируем Alignment
+    get_assemblies, check_misassembled_blocks, Alignment
 
 try:
-   from collections import OrderedDict
+    from collections import OrderedDict
 except ImportError:
-   from quast_libs.site_packages.ordered_dict import OrderedDict
+    from quast_libs.site_packages.ordered_dict import OrderedDict
 
 import os
 import re
@@ -29,8 +22,7 @@ from quast_libs.ca_utils.misc import ref_labels_by_chromosomes
 import quast_libs.html_saver.html_saver as html_saver
 
 from quast_libs import reporting
-from quast_libs.log import get_logger
-logger = get_logger(qconfig.LOGGER_DEFAULT_NAME)
+
 
 def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
        cov_fpath=None, physical_cov_fpath=None, gc_fpath=None,
@@ -102,20 +94,16 @@ def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
                 block.label = label
 
             aligned_blocks = check_misassembled_blocks(aligned_blocks, misassembled_id_to_structure)
-            logger.info(f"Число блоков перед объединением для {contigs_fpath}: {len(aligned_blocks)}")
-            
-            # Объединение блоков в пределах одного континга, если они близко друг к другу
             merged_aligned_blocks = merge_blocks_within_contig(aligned_blocks, threshold=1000)
-            logger.info(f"Число блоков после объединения для {contigs_fpath}: {len(merged_aligned_blocks)}")
-            
-            for i, block in enumerate(merged_aligned_blocks):
-                logger.info(f"Блок {i+1}: Континг {block.name}, Позиции ({block.start}, {block.end}), Длина {block.end - block.start}")
 
             lists_of_aligned_blocks.append(merged_aligned_blocks)
 
-            structures_by_labels[label] = {
-                block.name: [block] for block in merged_aligned_blocks
-            }
+            structures_by_labels[label] = {}
+            for block in merged_aligned_blocks:
+                if isinstance(block, MergedAlignment):
+                    if block.name not in structures_by_labels[label]:
+                        structures_by_labels[label][block.name] = []
+                    structures_by_labels[label][block.name].append(block)
 
             contigs_by_assemblies[label] = contigs
             
@@ -141,6 +129,12 @@ def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
     return icarus_html_fpath
 
 
+class MergedAlignment(Alignment):
+    def __init__(self, *args, label=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.label = label  
+        self.segments = [(self.start, self.end)]  
+
 def merge_blocks_within_contig(blocks, threshold=1000):
     blocks.sort(key=lambda x: x.start)
     
@@ -148,87 +142,69 @@ def merge_blocks_within_contig(blocks, threshold=1000):
     if not blocks:
         return merged_blocks
 
-    current_block = blocks[0]
-    current_start, current_end = current_block.start, current_block.end
-    current_label = current_block.label
-
-    logger.info(f"Начинаем объединение блоков с порогом {threshold} bp")
+    current_block = MergedAlignment(
+        name=blocks[0].name,
+        start=blocks[0].start,
+        end=blocks[0].end,
+        unshifted_start=blocks[0].unshifted_start,
+        unshifted_end=blocks[0].unshifted_end,
+        is_rc=blocks[0].is_rc,
+        start_in_contig=blocks[0].start_in_contig,
+        end_in_contig=blocks[0].end_in_contig,
+        position_in_ref=blocks[0].position_in_ref,
+        ref_name=blocks[0].ref_name,
+        idy=blocks[0].idy,
+        is_best_set=blocks[0].is_best_set,
+        label=blocks[0].label
+    )
 
     for i in range(1, len(blocks)):
         next_block = blocks[i]
-        gap = next_block.start - current_end  # Расстояние между текущим и следующим блоком
+        gap = next_block.start - current_block.end
 
-        # Если расстояние отрицательное, блоки не объединяются
         if gap < 0:
-            logger.warning(f"Отрицательное расстояние между блоками: текущий ({current_start}, {current_end}), следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
-            merged_block = Alignment(
-                name=current_block.name,
-                start=current_start,
-                end=current_end,
-                unshifted_start=current_block.unshifted_start,
-                unshifted_end=current_block.unshifted_end,
-                is_rc=current_block.is_rc,
-                start_in_contig=current_block.start_in_contig,
-                end_in_contig=current_block.end_in_contig,
-                position_in_ref=current_block.position_in_ref,
-                ref_name=current_block.ref_name,
-                idy=current_block.idy,
-                is_best_set=current_block.is_best_set
+            merged_blocks.append(current_block)
+            current_block = MergedAlignment(
+                name=next_block.name,
+                start=next_block.start,
+                end=next_block.end,
+                unshifted_start=next_block.unshifted_start,
+                unshifted_end=next_block.unshifted_end,
+                is_rc=next_block.is_rc,
+                start_in_contig=next_block.start_in_contig,
+                end_in_contig=next_block.end_in_contig,
+                position_in_ref=next_block.position_in_ref,
+                ref_name=next_block.ref_name,
+                idy=next_block.idy,
+                is_best_set=next_block.is_best_set,
+                label=next_block.label
             )
-            merged_block.label = current_label
-            merged_blocks.append(merged_block)
-
-            current_block = next_block
-            current_start, current_end = next_block.start, next_block.end
-            current_label = next_block.label
             continue
 
         if next_block.name == current_block.name and gap <= threshold:
-            logger.info(f"Объединяем блоки: текущий ({current_start}, {current_end}) и следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
-            current_end = next_block.end  
+            current_block.end = next_block.end
+            current_block.segments.append((next_block.start, next_block.end))
         else:
-            merged_block = Alignment(
-                name=current_block.name,
-                start=current_start,
-                end=current_end,
-                unshifted_start=current_block.unshifted_start,
-                unshifted_end=current_block.unshifted_end,
-                is_rc=current_block.is_rc,
-                start_in_contig=current_block.start_in_contig,
-                end_in_contig=current_block.end_in_contig,
-                position_in_ref=current_block.position_in_ref,
-                ref_name=current_block.ref_name,
-                idy=current_block.idy,
-                is_best_set=current_block.is_best_set
+            merged_blocks.append(current_block)
+            current_block = MergedAlignment(
+                name=next_block.name,
+                start=next_block.start,
+                end=next_block.end,
+                unshifted_start=next_block.unshifted_start,
+                unshifted_end=next_block.unshifted_end,
+                is_rc=next_block.is_rc,
+                start_in_contig=next_block.start_in_contig,
+                end_in_contig=next_block.end_in_contig,
+                position_in_ref=next_block.position_in_ref,
+                ref_name=next_block.ref_name,
+                idy=next_block.idy,
+                is_best_set=next_block.is_best_set,
+                label=next_block.label
             )
-            merged_block.label = current_label
-            merged_blocks.append(merged_block)
-            
-            logger.info(f"Сохраняем блок ({current_start}, {current_end}), следующий блок на расстоянии {gap} bp, создаем новый блок.")
-            current_block = next_block
-            current_start, current_end = next_block.start, next_block.end
-            current_label = next_block.label
 
-    merged_block = Alignment(
-        name=current_block.name,
-        start=current_start,
-        end=current_end,
-        unshifted_start=current_block.unshifted_start,
-        unshifted_end=current_block.unshifted_end,
-        is_rc=current_block.is_rc,
-        start_in_contig=current_block.start_in_contig,
-        end_in_contig=current_block.end_in_contig,
-        position_in_ref=current_block.position_in_ref,
-        ref_name=current_block.ref_name,
-        idy=current_block.idy,
-        is_best_set=current_block.is_best_set
-    )
-    merged_block.label = current_label
-    merged_blocks.append(merged_block)
-    
-    logger.info(f"Сохраняем последний блок ({current_start}, {current_end})")
-
+    merged_blocks.append(current_block)
     return merged_blocks
+
 
 
 def natural_sort(string_):
@@ -238,6 +214,7 @@ def natural_sort(string_):
 def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, structures_by_labels,
                 contigs_by_assemblies, ambiguity_alignments_by_labels=None, contig_names_by_refs=None, ref_fpath=None,
                 stdout_pattern=None, features_data=None, gc_fpath=None, cov_fpath=None, physical_cov_fpath=None, json_output_dir=None):
+    
     chr_names = []
     if chromosomes_length and assemblies:
         chr_to_aligned_blocks = OrderedDict()
@@ -258,13 +235,26 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
             report.add_field(reporting.Fields.SIMILAR_CONTIGS, similar_correct)
             report.add_field(reporting.Fields.SIMILAR_MIS_BLOCKS, similar_misassembled)
 
+    data_str = []
+    for label, merged_blocks in structures_by_labels.items():  
+        for alignment_list in merged_blocks.values():
+            for alignment in alignment_list:                
+                if not isinstance(alignment, MergedAlignment):
+                    continue 
+                
+                merged_start = min(segment[0] for segment in alignment.segments)
+                merged_end = max(segment[1] for segment in alignment.segments)
+
+                data_str.append(
+                    f'{{name: "{alignment.name}", start: {merged_start}, end: {merged_end}, ref_name: "{alignment.ref_name}", label: "{alignment.label}", idy: {alignment.idy}}}'
+                )
+
     main_menu_fpath = os.path.join(output_dirpath, qconfig.icarus_html_fname)
     output_all_files_dir_path = os.path.join(output_dirpath, qconfig.icarus_dirname)
     if not os.path.exists(output_all_files_dir_path):
         os.mkdir(output_all_files_dir_path)
 
     chr_full_names, contig_names_by_refs = group_references(chr_names, contig_names_by_refs, chromosomes_length, ref_fpath)
-
     cov_data, max_depth = parse_cov_fpath(cov_fpath, chr_names, chr_full_names, contig_names_by_refs)
     physical_cov_data, physical_max_depth = parse_cov_fpath(physical_cov_fpath, chr_names, chr_full_names, contig_names_by_refs)
     gc_data, max_gc = parse_cov_fpath(gc_fpath, chr_names, chr_full_names, contig_names_by_refs)
