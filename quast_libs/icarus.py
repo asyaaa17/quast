@@ -10,9 +10,9 @@ from quast_libs.icarus_utils import make_output_dir, group_references, format_co
     get_assemblies, check_misassembled_blocks, Alignment
 
 try:
-    from collections import OrderedDict
+   from collections import OrderedDict
 except ImportError:
-    from quast_libs.site_packages.ordered_dict import OrderedDict
+   from quast_libs.site_packages.ordered_dict import OrderedDict
 
 import os
 import re
@@ -22,6 +22,8 @@ from quast_libs.ca_utils.misc import ref_labels_by_chromosomes
 import quast_libs.html_saver.html_saver as html_saver
 
 from quast_libs import reporting
+from quast_libs.log import get_logger
+logger = get_logger(qconfig.LOGGER_DEFAULT_NAME)
 
 
 def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
@@ -135,7 +137,7 @@ class MergedAlignment(Alignment):
         self.label = label  
         self.segments = [(self.start, self.end)]  
 
-def merge_blocks_within_contig(blocks, threshold=1000):
+def merge_blocks_within_contig(blocks, threshold=1000, filter_length=5000):
     blocks.sort(key=lambda x: x.start)
     
     merged_blocks = []
@@ -158,6 +160,9 @@ def merge_blocks_within_contig(blocks, threshold=1000):
         label=blocks[0].label
     )
 
+    min_contig_start = current_block.start_in_contig
+    max_contig_end = current_block.end_in_contig
+
     for i in range(1, len(blocks)):
         next_block = blocks[i]
         gap = next_block.start - current_block.end
@@ -179,12 +184,18 @@ def merge_blocks_within_contig(blocks, threshold=1000):
                 is_best_set=next_block.is_best_set,
                 label=next_block.label
             )
+            min_contig_start = current_block.start_in_contig
+            max_contig_end = current_block.end_in_contig
             continue
 
         if next_block.name == current_block.name and gap <= threshold:
             current_block.end = next_block.end
             current_block.segments.append((next_block.start, next_block.end))
+            min_contig_start = min(min_contig_start, next_block.start_in_contig)
+            max_contig_end = max(max_contig_end, next_block.end_in_contig)
         else:
+            current_block.start_in_contig = min_contig_start
+            current_block.end_in_contig = max_contig_end
             merged_blocks.append(current_block)
             current_block = MergedAlignment(
                 name=next_block.name,
@@ -201,10 +212,26 @@ def merge_blocks_within_contig(blocks, threshold=1000):
                 is_best_set=next_block.is_best_set,
                 label=next_block.label
             )
+            min_contig_start = current_block.start_in_contig
+            max_contig_end = current_block.end_in_contig
 
+    current_block.start_in_contig = min_contig_start
+    current_block.end_in_contig = max_contig_end
     merged_blocks.append(current_block)
-    return merged_blocks
-
+    
+    # Фильтрация объединённых блоков
+    filtered_blocks = [
+        block for block in merged_blocks
+        if (block.end - block.start) >= filter_length and
+           (block.end_in_contig - block.start_in_contig) >= filter_length
+    ]
+    
+    logger.info(f"Общее количество блоков после фильтрации по длине {filter_length} bp: {len(filtered_blocks)}")
+    for block in filtered_blocks:
+        logger.info(f"Фильтрованный блок для {block.name}: {[(seg[0], seg[1]) for seg in block.segments]} "
+                    f"с contig {block.start_in_contig} – {block.end_in_contig}")
+    
+    return filtered_blocks
 
 
 def natural_sort(string_):
@@ -379,3 +406,4 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
     html_saver.save_icarus_links(output_dirpath, icarus_links)
 
     return main_menu_fpath
+
