@@ -16,6 +16,19 @@ except ImportError:
 from quast_libs import qconfig, qutils, reporting
 from quast_libs.html_saver import html_saver
 from quast_libs.icarus_utils import Alignment, get_html_name, format_long_numbers, get_misassembly_for_alignment, parse_misassembly_info
+import logging
+
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG, 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("icarus_builder.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 def get_assemblies_data(contigs_fpaths, icarus_dirpath, stdout_pattern, nx_marks):
@@ -44,32 +57,54 @@ def get_assemblies_data(contigs_fpaths, icarus_dirpath, stdout_pattern, nx_marks
             assemblies_n50[assembly_label][nx] = report.get_field(nx)
     return assemblies_data, assemblies_contig_size_data, assemblies_n50
 
-
 def add_contig_structure_data(data_str, structure, ref_contigs, chr_full_names, contig_names_by_refs,
                               used_chromosomes, links_to_chromosomes, chr_names_by_id):
     for el in structure:
         if isinstance(el, Alignment):
+            # Объединяем диапазоны для reference и contig
+            merged_start = min(segment[0] for segment in el.segments)
+            merged_end = max(segment[1] for segment in el.segments)
+            
+            # Теперь выбираем минимальный и максимальный значения для `contig` позиций
+            merged_contig_start = min(el.start_in_contig for segment in el.segments)
+            merged_contig_end = max(el.end_in_contig for segment in el.segments)
+            
+            # Проверяем наличие ref_name в ref_contigs
             if el.ref_name in ref_contigs:
                 num_chr = ref_contigs.index(el.ref_name)
-                # corr_len = sum(chr_lengths[:num_chr+1])
             else:
-                # corr_len = -int(el.end)
                 if el.ref_name not in used_chromosomes:
                     used_chromosomes.append(el.ref_name)
                     if contig_names_by_refs:
                         other_ref_name = contig_names_by_refs[el.ref_name]
                         links_to_chromosomes.append('links_to_chromosomes["' + el.ref_name + '"] = "' +
-                                                get_html_name(other_ref_name, chr_full_names) + '";')
-            corr_el_start = el.start
-            corr_el_end = el.end
-            data_str.append('{corr_start: ' + str(corr_el_start) + ',corr_end: ' +
-                            str(corr_el_end) + ',start:' + str(el.unshifted_start) + ',end:' + str(el.unshifted_end) +
-                            ',start_in_contig:' + str(el.start_in_contig) + ',end_in_contig:' +
-                            str(el.end_in_contig) + ',IDY:' + el.idy + ',chr: "' + chr_names_by_id[el.ref_name] + '"},')
-        elif type(el) == str:
+                                                    get_html_name(other_ref_name, chr_full_names) + '";')
+
+            # Добавляем объединённые значения в data_str
+            data_str.append(
+                '{corr_start: ' + str(merged_start) + 
+                ', corr_end: ' + str(merged_end) + 
+                ', start: ' + str(merged_start) + 
+                ', end: ' + str(merged_end) + 
+                ', start_in_contig: ' + str(merged_contig_start) + 
+                ', end_in_contig: ' + str(merged_contig_end) +
+                ', IDY: ' + str(el.idy) + 
+                ', chr: "' + chr_names_by_id[el.ref_name] + '"},'
+            )
+            
+            logging.debug(f"Добавлен объединённый блок для contig info: "
+                          f"name={el.ref_name}, ref_start={merged_start}, ref_end={merged_end}, "
+                          f"contig_start={merged_contig_start}, contig_end={merged_contig_end}")
+        elif isinstance(el, str):
+            # Обработка строковых элементов, если они встречаются в структуре
             ms_description, ms_type = parse_misassembly_info(el)
             data_str.append('{contig_type: "M", mstype: "' + ms_type + '", msg: "' + ms_description + '"},')
+            #logging.debug(f"Добавлен блок с ошибкой сборки: type={ms_type}, description={ms_description}")
+
+    #logging.debug(f"Data string after merging for Contig info: {data_str[:500]}")
+    
     return data_str
+
 
 
 def get_contigs_structure(assemblies_contigs, chr_to_aligned_blocks, contigs_by_assemblies, ref_contigs, chr_full_names,
@@ -101,6 +136,7 @@ def prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref
                                        cov_data_str=None, physical_cov_data_str=None, gc_data_str=None):
     html_name = get_html_name(chr, chr_full_names)
     alignment_viewer_fpath = join(output_dir_path, html_name + '.html')
+    #logging.info(f"Processing chromosome: {chr}, generating file: {alignment_viewer_fpath}")
 
     additional_assemblies_data = ''
     data_str.append('var links_to_chromosomes;')
@@ -130,34 +166,20 @@ def prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref
             if ref_contig in chr_to_aligned_blocks[assembly]:
                 overlapped_contigs = defaultdict(list)
                 alignments = sorted(chr_to_aligned_blocks[assembly][ref_contig], key=lambda x: x.start)
-                prev_end = 0
-                prev_alignments = []
                 
-                # Check for overlapping alignments
-                if not qconfig.large_genome:
-                    for alignment in alignments:
-                        if prev_end > alignment.start:
-                            for prev_align in prev_alignments:
-                                if alignment.name != prev_align.name and prev_align.end - alignment.start > 100:
-                                    overlapped_contigs[prev_align].append('{contig:"' + alignment.name + '",corr_start: ' + str(alignment.start) +
-                                        ',corr_end: ' + str(alignment.end) + ',start:' + str(alignment.unshifted_start) +
-                                        ',end:' + str(alignment.unshifted_end) + ',start_in_contig:' + str(alignment.start_in_contig) +
-                                        ',end_in_contig:' + str(alignment.end_in_contig) + ',chr: "' + chr_names_by_id[alignment.ref_name] + '"}')
-                                    overlapped_contigs[alignment].append('{contig:"' + prev_align.name + '",corr_start: ' + str(prev_align.start) +
-                                        ',corr_end: ' + str(prev_align.end) + ',start:' + str(prev_align.unshifted_start) +
-                                        ',end:' + str(prev_align.unshifted_end) + ',start_in_contig:' + str(prev_align.start_in_contig) +
-                                        ',end_in_contig:' + str(prev_align.end_in_contig) + ',chr: "' + chr_names_by_id[prev_align.ref_name] + '"}')
-                            prev_alignments.append(alignment)
-                        else:
-                            prev_alignments = [alignment]
-                        prev_end = max(prev_end, alignment.end)
-
+                # Initialize merged contig start and end positions
+                merged_contig_start = min(alignment.start_in_contig for alignment in alignments)
+                merged_contig_end = max(alignment.end_in_contig for alignment in alignments)
+                
                 for alignment in alignments:
                     assemblies_len[assembly] += abs(alignment.end_in_contig - alignment.start_in_contig) + 1
                     assemblies_contigs[assembly].add(alignment.name)
                     contig_structure = structures_by_labels[alignment.label]
                     contig_more_unaligned = False
+
+                    #logging.debug(f"Processing alignment: {alignment.name}, start: {alignment.start}, end: {alignment.end}")
                     
+                    # Calculate misassemblies and misassembled ends
                     if alignment.misassembled:
                         num_misassemblies += 1
                         misassemblies, misassembled_ends = get_misassembly_for_alignment(contig_structure[alignment.name], alignment)
@@ -175,53 +197,39 @@ def prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref
                             contig_more_unaligned = True
                         misassembled_ends = ''
 
-                    genes = []
-                    start_in_contig, end_in_contig = min(alignment.start_in_contig, alignment.end_in_contig), \
-                                                     max(alignment.start_in_contig, alignment.end_in_contig)
-                    for gene in contigs[alignment.name].genes:
-                        if start_in_contig < gene.start < end_in_contig or start_in_contig < gene.end < end_in_contig:
-                            corr_start = max(alignment.start, alignment.start + (gene.start - start_in_contig))
-                            corr_end = min(alignment.end, alignment.end + (gene.end - end_in_contig))
-                            gene_info = '{start:' + str(gene.start) + ',end:' + str(gene.end) + ',corr_start:' + \
-                                        str(corr_start) + ',corr_end:' + str(corr_end) + '}'
-                            genes.append(gene_info)
-                    
-                    # Add each segment as a separate entry
-                    for segment_start, segment_end in alignment.segments:
-                        data_str.append(
-                            f'{{name: "{alignment.name}", corr_start: {segment_start}, corr_end: {segment_end}, '
-                            f'start: {alignment.unshifted_start}, end: {alignment.unshifted_end}, '
-                            f'misassemblies: "{alignment.misassemblies}", mis_ends: "{misassembled_ends}", '
-                            f'ref_name: "{alignment.ref_name}", idy: {alignment.idy}'
-                        )
-                        
-                        if alignment.similar:
-                            data_str[-1] += ', similar: "True"'
-                        if alignment.ambiguous:
-                            data_str[-1] += ', ambiguous: "True"'
-                        if alignment.is_best_set:
-                            data_str[-1] += ', is_best: "True"'
-                        if contig_more_unaligned:
-                            data_str[-1] += ', more_unaligned: "True"'
-                        
-                        if overlapped_contigs[alignment]:
-                            data_str.append(', overlaps: [ ')
-                            data_str.append(', '.join(overlapped_contigs[alignment]))
-                            data_str.append(']')
-                        if qconfig.gene_finding:
-                            data_str.append(', genes: [' + ', '.join(genes) + ']')
-                        if ambiguity_alignments_by_labels and qconfig.ambiguity_usage == 'all':
-                            data_str.append(', ambiguous_alignments: [ ')
-                            data_str = add_contig_structure_data(
-                                data_str, ambiguity_alignments_by_labels[alignment.label][alignment.name],
-                                ref_contigs, chr_full_names, contig_names_by_refs,
-                                used_chromosomes, links_to_chromosomes, chr_names_by_id
-                            )
-                            data_str[-1] = data_str[-1][:-1] + '],'
-                        
-                        data_str[-1] += '},'
+                    # Объединяем сегменты в один диапазон
+                    merged_start = min(segment[0] for segment in alignment.segments)
+                    merged_end = max(segment[1] for segment in alignment.segments)
+                    merged_length = merged_end - merged_start
+                    total_idy = alignment.idy
 
+                    # Логирование объединённого блока для Contig info
+                    logging.info(f"Adding block to contig_data: {alignment.name}, "
+                                 f"reference {merged_start} – {merged_end} ({merged_length} bp), "
+                                 f"contig {merged_contig_start} – {merged_contig_end}, IDY: {total_idy}%")
+                    
+                    # Добавляем блок в `data_str` с объединёнными contig позициями
+                    data_str.append(
+                        f'{{name: "{alignment.name}", corr_start: {merged_start}, corr_end: {merged_end}, '
+                        f'start: {alignment.unshifted_start}, end: {alignment.unshifted_end}, '
+                        f'misassemblies: "{alignment.misassemblies}", mis_ends: "{misassembled_ends}", '
+                        f'ref_name: "{alignment.ref_name}", idy: {total_idy}, contig_start: {merged_contig_start}, contig_end: {merged_contig_end}'
+                    )
+                    
+                    if alignment.similar:
+                        data_str[-1] += ', similar: "True"'
+                    if alignment.ambiguous:
+                        data_str[-1] += ', ambiguous: "True"'
+                    if alignment.is_best_set:
+                        data_str[-1] += ', is_best: "True"'
+                    if contig_more_unaligned:
+                        data_str[-1] += ', more_unaligned: "True"'
+                    
+                    data_str[-1] += '},'  # Завершаем строку
+                   
         data_str[-1] = data_str[-1][:-1] + '];'
+        
+        # Store additional assembly data
         assembly_len = assemblies_len[assembly]
         assembly_contigs = len(assemblies_contigs[assembly])
         local_misassemblies = ms_types[assembly]['local'] // 2
@@ -231,6 +239,7 @@ def prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref
         additional_assemblies_data += f'assemblies_contigs["{assembly}"] = {assembly_contigs};\n'
         additional_assemblies_data += f'assemblies_misassemblies["{assembly}"] = "{ext_misassemblies}+{local_misassemblies}";\n'
 
+    # Append any additional data such as coverage
     if cov_data_str:
         data_str.extend(cov_data_str)
     if physical_cov_data_str:
@@ -263,8 +272,14 @@ def prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref
     if contig_names_by_refs:
         data_str.append(''.join(links_to_chromosomes))
     
+    #logging.info("Final data string for visualization prepared.")
+    #logging.debug(f"Data string sample: {data_str[:5]}")
+
     data_str = '\n'.join(data_str)
+    #logging.debug(f"Complete data string for {chr}: {data_str[:500]}")  # Покажет первые 500 символов
+
     return alignment_viewer_fpath, data_str, contigs_structure_str, additional_assemblies_data, ms_selectors, num_misassemblies, aligned_assemblies
+
 
 def add_contig(cum_length, contig, not_used_nx, assemblies_n50, assembly, contigs, contig_size_lines, num, structures_by_labels,
                only_nx=False, has_aligned_contigs=True):
