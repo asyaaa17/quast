@@ -22,6 +22,8 @@ from quast_libs.ca_utils.misc import ref_labels_by_chromosomes
 import quast_libs.html_saver.html_saver as html_saver
 
 from quast_libs import reporting
+from quast_libs.log import get_logger
+logger = get_logger(qconfig.LOGGER_DEFAULT_NAME)
 
 
 def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
@@ -97,8 +99,16 @@ def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
             
             merged_aligned_blocks = merge_blocks_within_contig(aligned_blocks, threshold=1000)
 
+            # Отфильтрованные блоки
             filtered_blocks = [block for block in merged_aligned_blocks if (block.end - block.start) <= 1000]
             merged_aligned_blocks = [block for block in merged_aligned_blocks if (block.end - block.start) > 1000]
+
+            # Логируем отфильтрованные блоки
+            for i, block in enumerate(filtered_blocks):
+                logger.info(f"Отфильтрованный блок {i+1}: Континг {block.name}, Позиции ({block.start}, {block.end}), Длина {block.end - block.start} bp")
+
+            for i, block in enumerate(merged_aligned_blocks):
+                logger.info(f"Блок {i+1}: Континг {block.name}, Позиции ({block.start}, {block.end}), Длина {block.end - block.start}")
 
             lists_of_aligned_blocks.append(merged_aligned_blocks)
 
@@ -108,6 +118,8 @@ def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
                     if block.name not in structures_by_labels[label]:
                         structures_by_labels[label][block.name] = []
                     structures_by_labels[label][block.name].append(block)
+                else:
+                    logger.error(f"Expected MergedAlignment object, but got {type(block)}")
 
             contigs_by_assemblies[label] = contigs
             
@@ -164,11 +176,14 @@ def merge_blocks_within_contig(blocks, threshold=1000):
         label=blocks[0].label
     )
 
+    #logger.info(f"Начинаем объединение блоков с порогом {threshold} bp")
+
     for i in range(1, len(blocks)):
         next_block = blocks[i]
         gap = next_block.start - current_block.end
 
         if gap < 0:
+            #logger.warning(f"Отрицательное расстояние между блоками: текущий ({current_block.start}, {current_block.end}), следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
             merged_blocks.append(current_block)
             
             current_block = MergedAlignment(
@@ -189,10 +204,12 @@ def merge_blocks_within_contig(blocks, threshold=1000):
             continue
 
         if next_block.name == current_block.name and gap <= threshold:
+            logger.info(f"Объединяем блоки: текущий ({current_block.start}, {current_block.end}) и следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
             current_block.end = next_block.end
             current_block.segments.append((next_block.start, next_block.end))
         else:
             merged_blocks.append(current_block)
+            logger.info(f"Сохраняем блок ({current_block.start}, {current_block.end}), следующий блок на расстоянии {gap} bp, создаем новый блок.")
             current_block = MergedAlignment(
                 name=next_block.name,
                 start=next_block.start,
@@ -210,6 +227,9 @@ def merge_blocks_within_contig(blocks, threshold=1000):
             )
 
     merged_blocks.append(current_block)
+    #logger.info(f"Сохраняем последний блок ({current_block.start}, {current_block.end})")
+    for block in merged_blocks:
+        logger.info(f"Объединенные блоки для {block.name}: {[(seg[0], seg[1]) for seg in block.segments]}")
 
     return merged_blocks
 
@@ -251,14 +271,19 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
         for alignment_list in merged_blocks.values():
             for alignment in alignment_list:                
                 if not isinstance(alignment, MergedAlignment):
+                    logger.error(f"Expected MergedAlignment object, but got {type(alignment)}")                
                     continue 
                 
                 merged_start = min(segment[0] for segment in alignment.segments)
                 merged_end = max(segment[1] for segment in alignment.segments)
+                
+                #logger.info(f"Добавление объединенного блока для визуализации: {alignment.name}, start: {merged_start}, end: {merged_end}, ref_name: {alignment.ref_name}")
 
                 data_str.append(
                     f'{{name: "{alignment.name}", start: {merged_start}, end: {merged_end}, ref_name: "{alignment.ref_name}", label: "{alignment.label}", idy: {alignment.idy}}}'
                 )
+
+    logger.debug(f"Generated data string for visualization: {data_str[:5]}... (showing first 5 entries)")
 
     main_menu_fpath = os.path.join(output_dirpath, qconfig.icarus_html_fname)
     output_all_files_dir_path = os.path.join(output_dirpath, qconfig.icarus_dirname)
@@ -303,6 +328,12 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
         chr_size = sum([chromosomes_length[contig] for contig in ref_contigs])
         chr_sizes[chr] = chr_size
         num_contigs[chr] = len(ref_contigs)
+        data_str = []
+        data_str.append('var chromosomes_len = {};')
+        for ref_contig in ref_contigs:
+            l = chromosomes_length[ref_contig]
+            data_str.append('chromosomes_len["' + ref_contig + '"] = ' + str(l) + ';')
+            aligned_bases_by_chr[chr].extend(aligned_bases[ref_contig])
 
         cov_data_str = format_cov_data(chr, cov_data, 'coverage_data', max_depth, 'reads_max_depth') if cov_data else None
         physical_cov_data_str = format_cov_data(chr, physical_cov_data, 'physical_coverage_data', physical_max_depth, 'physical_max_depth') \
@@ -310,7 +341,7 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
         gc_data_str = format_cov_data(chr, gc_data, 'gc_data', 100, 'max_gc') if gc_data else None
 
         alignment_viewer_fpath, ref_data_str, contigs_structure_str, additional_assemblies_data, ms_selectors, num_misassemblies[chr], aligned_assemblies[chr] = \
-            prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref_contigs, [], chr_to_aligned_blocks, structures_by_labels,
+            prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref_contigs, data_str, chr_to_aligned_blocks, structures_by_labels,
                                                contigs_by_assemblies, ambiguity_alignments_by_labels=ambiguity_alignments_by_labels,
                                                cov_data_str=cov_data_str, physical_cov_data_str=physical_cov_data_str, gc_data_str=gc_data_str,
                                                contig_names_by_refs=contig_names_by_refs, output_dir_path=output_all_files_dir_path)
@@ -383,6 +414,5 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
     html_saver.save_icarus_html(main_menu_template_fpath, main_menu_fpath, main_data_dict)
     html_saver.save_icarus_links(output_dirpath, icarus_links)
 
-    return main_menu_fpath
-
+    return main_menu_fpath  
 
