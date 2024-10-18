@@ -183,7 +183,7 @@ def merge_blocks_within_contig(blocks, threshold=50000):
         gap = next_block.start - current_block.end
 
         if gap < 0:
-            #logger.warning(f"Отрицательное расстояние между блоками: текущий ({current_block.start}, {current_block.end}), следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
+            logger.warning(f"Отрицательное расстояние между блоками: текущий ({current_block.start}, {current_block.end}), следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
             merged_blocks.append(current_block)
             
             current_block = MergedAlignment(
@@ -204,12 +204,12 @@ def merge_blocks_within_contig(blocks, threshold=50000):
             continue
 
         if next_block.name == current_block.name and gap <= threshold:
-            logger.info(f"Объединяем блоки: текущий ({current_block.start}, {current_block.end}) и следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
+            #logger.info(f"Объединяем блоки: текущий ({current_block.start}, {current_block.end}) и следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
             current_block.end = next_block.end
             current_block.segments.append((next_block.start, next_block.end))
         else:
             merged_blocks.append(current_block)
-            logger.info(f"Сохраняем блок ({current_block.start}, {current_block.end}), следующий блок на расстоянии {gap} bp, создаем новый блок.")
+            #logger.info(f"Сохраняем блок ({current_block.start}, {current_block.end}), следующий блок на расстоянии {gap} bp, создаем новый блок.")
             current_block = MergedAlignment(
                 name=next_block.name,
                 start=next_block.start,
@@ -271,7 +271,7 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
         for alignment_list in merged_blocks.values():
             for alignment in alignment_list:                
                 if not isinstance(alignment, MergedAlignment):
-                    logger.error(f"Expected MergedAlignment object, but got {type(alignment)}")                
+                    #logger.error(f"Expected MergedAlignment object, but got {type(alignment)}")                
                     continue 
                 
                 merged_start = min(segment[0] for segment in alignment.segments)
@@ -283,7 +283,7 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
                     f'{{name: "{alignment.name}", start: {merged_start}, end: {merged_end}, ref_name: "{alignment.ref_name}", label: "{alignment.label}", idy: {alignment.idy}}}'
                 )
 
-    logger.debug(f"Generated data string for visualization: {data_str[:5]}... (showing first 5 entries)")
+    #logger.debug(f"Generated data string for visualization: {data_str[:5]}... (showing first 5 entries)")
 
     main_menu_fpath = os.path.join(output_dirpath, qconfig.icarus_html_fname)
     output_all_files_dir_path = os.path.join(output_dirpath, qconfig.icarus_dirname)
@@ -415,4 +415,3 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
     html_saver.save_icarus_links(output_dirpath, icarus_links)
 
     return main_menu_fpath  
-
