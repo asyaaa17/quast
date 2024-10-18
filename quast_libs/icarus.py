@@ -97,7 +97,7 @@ def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
 
             aligned_blocks = check_misassembled_blocks(aligned_blocks, misassembled_id_to_structure)
             
-            merged_aligned_blocks = merge_blocks_within_contig(aligned_blocks, threshold=1000)
+            merged_aligned_blocks = merge_blocks_within_contig(aligned_blocks, threshold=50000)
 
             # Отфильтрованные блоки
             filtered_blocks = [block for block in merged_aligned_blocks if (block.end - block.start) <= 1000]
@@ -153,7 +153,7 @@ class MergedAlignment(Alignment):
         self.segments = [(self.start, self.end)]
 
 
-def merge_blocks_within_contig(blocks, threshold=1000):
+def merge_blocks_within_contig(blocks, threshold=50000):
     blocks.sort(key=lambda x: x.start)
     
     merged_blocks = []
