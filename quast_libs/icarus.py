@@ -137,6 +137,7 @@ class MergedAlignment(Alignment):
         self.label = label  
         self.segments = [(self.start, self.end)]  
 
+
 def merge_blocks_within_contig(blocks, threshold=1000, filter_length=5000):
     blocks.sort(key=lambda x: x.start)
     
@@ -219,13 +220,20 @@ def merge_blocks_within_contig(blocks, threshold=1000, filter_length=5000):
     current_block.end_in_contig = max_contig_end
     merged_blocks.append(current_block)
     
-    # Фильтрация объединённых блоков
+    # Логирование всех блоков перед фильтрацией
+    for block in merged_blocks:
+        block_length_reference = block.end - block.start
+        block_length_contig = block.end_in_contig - block.start_in_contig
+        logger.info(f"Блок перед фильтрацией: {block.name}, длина в reference: {block_length_reference} bp, "
+                    f"длина в contig: {block_length_contig} bp")
+       
+    # Фильтрация объединённых блоков после объединения, по длине самого блока
     filtered_blocks = [
         block for block in merged_blocks
-        if (block.end - block.start) >= filter_length and
-           (block.end_in_contig - block.start_in_contig) >= filter_length
+        if (block.end - block.start) >= filter_length
     ]
     
+    # Логирование результатов после фильтрации
     logger.info(f"Общее количество блоков после фильтрации по длине {filter_length} bp: {len(filtered_blocks)}")
     for block in filtered_blocks:
         logger.info(f"Фильтрованный блок для {block.name}: {[(seg[0], seg[1]) for seg in block.segments]} "
