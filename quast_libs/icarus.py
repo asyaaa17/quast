@@ -1,5 +1,12 @@
 #!/usr/bin/python -O
 
+############################################################################
+# Copyright (c) 2015-2022 Saint Petersburg State University
+# Copyright (c) 2011-2015 Saint Petersburg Academic University
+# All Rights Reserved
+# See file LICENSE for details.
+############################################################################
+
 from __future__ import with_statement
 
 from quast_libs.icarus_builder import prepare_alignment_data_for_one_ref, save_alignment_data_for_one_ref, save_contig_size_html, \
@@ -7,7 +14,7 @@ from quast_libs.icarus_builder import prepare_alignment_data_for_one_ref, save_a
 from quast_libs.icarus_parser import parse_contigs_fpath, parse_features_data, parse_cov_fpath, parse_genes_data
 from quast_libs.icarus_parser import parse_aligner_contig_report
 from quast_libs.icarus_utils import make_output_dir, group_references, format_cov_data, format_long_numbers, get_info_by_chr, \
-    get_assemblies, check_misassembled_blocks, Alignment
+    get_assemblies, check_misassembled_blocks, Alignment  # Добавляем импорт класса Alignment
 
 try:
    from collections import OrderedDict
@@ -25,6 +32,32 @@ from quast_libs import reporting
 from quast_libs.log import get_logger
 logger = get_logger(qconfig.LOGGER_DEFAULT_NAME)
 
+#chm13.draft_v2.0.cen_mask.bed
+centromere_regions = {
+    'chr1': (121619169, 142242033),
+    'chr2': (92300802, 94695067),
+    'chr3': (90804701, 96415026),
+    'chr4': (49705154, 55303192),
+    'chr5': (46830042, 50962194),
+    'chr6': (58286706, 61058390),
+    'chr7': (60410644, 63714499),
+    'chr8': (44243546, 46325080),
+    'chr9': (44938599, 76694047),
+    'chr10': (39633793, 41926237),
+    'chr11': (51023358, 54476419),
+    'chr12': (34593492, 37202490),
+    'chr13': (0, 17508596),
+    'chr14': (0, 12708411),
+    'chr15': (0, 17694466),
+    'chr16': (35834066, 52219756),
+    'chr17': (23433372, 27571319),
+    'chr18': (15641581, 21121235),
+    'chr19': (24570766, 29769351),
+    'chr20': (26383658, 32969590),
+    'chr21': (0, 11306378),
+    'chr22': (0, 15711065),
+    'chrX': (57819763, 60927195)
+}
 
 def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
        cov_fpath=None, physical_cov_fpath=None, gc_fpath=None,
@@ -95,20 +128,52 @@ def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
             for block in aligned_blocks:
                 block.label = label
 
-            aligned_blocks = check_misassembled_blocks(aligned_blocks, misassembled_id_to_structure)
-            
-            merged_aligned_blocks = merge_blocks_within_contig(aligned_blocks, threshold=50000)
+            logger.info(f"Количество блоков до объединения: {len(aligned_blocks)}")
 
-            # Отфильтрованные блоки
+            # Merge blocks
+            merged_aligned_blocks = merge_blocks_within_contig(aligned_blocks, threshold=50000)
+            logger.info(f"Количество блоков после объединения: {len(merged_aligned_blocks)}")
+            
+            # Filter blocks
             filtered_blocks = [block for block in merged_aligned_blocks if (block.end - block.start) <= 1000]
             merged_aligned_blocks = [block for block in merged_aligned_blocks if (block.end - block.start) > 1000]
+            logger.info(f"Количество блоков после фильтрации: {len(merged_aligned_blocks)}")
 
-            # Логируем отфильтрованные блоки
-            for i, block in enumerate(filtered_blocks):
-                logger.info(f"Отфильтрованный блок {i+1}: Континг {block.name}, Позиции ({block.start}, {block.end}), Длина {block.end - block.start} bp")
+            centromeric_blocks = []
+            for block in merged_aligned_blocks:
+                centromere_start, centromere_end = centromere_regions.get(block.ref_name, (None, None))
+                if centromere_start is not None and centromere_end is not None:
+                    if block.start <= centromere_end and block.end >= centromere_start:
+                        centromeric_blocks.append(block)
 
-            for i, block in enumerate(merged_aligned_blocks):
-                logger.info(f"Блок {i+1}: Континг {block.name}, Позиции ({block.start}, {block.end}), Длина {block.end - block.start}")
+            logger.info(f"Количество блоков, входящих в центромерную зону: {len(centromeric_blocks)}")
+
+            if centromeric_blocks:
+                centromere_first_block_start = min(block.start for block in centromeric_blocks)
+                centromere_last_block_end = max(block.end for block in centromeric_blocks)
+
+                centromere_block = MergedAlignment(
+                    name=centromeric_blocks[0].name,
+                    start=centromere_first_block_start,
+                    end=centromere_last_block_end,
+                    unshifted_start=centromeric_blocks[0].unshifted_start,
+                    unshifted_end=centromeric_blocks[-1].unshifted_end,
+                    is_rc=centromeric_blocks[0].is_rc,
+                    start_in_contig=centromeric_blocks[0].start_in_contig,
+                    end_in_contig=centromeric_blocks[-1].end_in_contig,
+                    position_in_ref=centromeric_blocks[0].position_in_ref,
+                    ref_name=centromeric_blocks[0].ref_name,
+                    idy=centromeric_blocks[0].idy,
+                    is_best_set=centromeric_blocks[0].is_best_set,
+                    label=centromeric_blocks[0].label
+                )
+
+                merged_aligned_blocks = [block for block in merged_aligned_blocks if block not in centromeric_blocks]
+
+                # Добавляем сплошной блок центромеры
+                merged_aligned_blocks.append(centromere_block)
+                #logger.info(f"Создан сплошной блок для центромеры на хромосоме {centromere_block.ref_name}: "
+                            #f"Позиции ({centromere_block.start}, {centromere_block.end})")
 
             lists_of_aligned_blocks.append(merged_aligned_blocks)
 
@@ -143,7 +208,6 @@ def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
         icarus_html_fpath = None
 
     return icarus_html_fpath
-
 
 
 class MergedAlignment(Alignment):
@@ -183,7 +247,6 @@ def merge_blocks_within_contig(blocks, threshold=50000):
         gap = next_block.start - current_block.end
 
         if gap < 0:
-            logger.warning(f"Отрицательное расстояние между блоками: текущий ({current_block.start}, {current_block.end}), следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
             merged_blocks.append(current_block)
             
             current_block = MergedAlignment(
@@ -228,8 +291,6 @@ def merge_blocks_within_contig(blocks, threshold=50000):
 
     merged_blocks.append(current_block)
     #logger.info(f"Сохраняем последний блок ({current_block.start}, {current_block.end})")
-    for block in merged_blocks:
-        logger.info(f"Объединенные блоки для {block.name}: {[(seg[0], seg[1]) for seg in block.segments]}")
 
     return merged_blocks
 
@@ -415,3 +476,4 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
     html_saver.save_icarus_links(output_dirpath, icarus_links)
 
     return main_menu_fpath  
+
