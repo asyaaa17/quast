@@ -59,16 +59,6 @@ centromere_regions = {
     'chrX': (57819763, 60927195)
 }
 
-# Функция для стандартизации имени хромосомы
-def standardize_chromosome_name(ref_name):
-    if "NC_" in ref_name:
-        return f"chr{ref_name.split('chromosome')[1].strip().split()[0]}"
-    elif ref_name.startswith("chr"):
-        return ref_name
-    elif "chromosome" in ref_name.lower():
-        return f"chr{''.join(filter(str.isdigit, ref_name))}"  # 'chromosome1' -> 'chr1'
-    return None  
-
 def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
        cov_fpath=None, physical_cov_fpath=None, gc_fpath=None,
        stdout_pattern=None, find_similar=True, features=None, json_output_dir=None, genes_by_labels=None):
