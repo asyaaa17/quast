@@ -9,12 +9,13 @@
 
 from __future__ import with_statement
 
+
 from quast_libs.icarus_builder import prepare_alignment_data_for_one_ref, save_alignment_data_for_one_ref, save_contig_size_html, \
     get_assemblies_data, get_contigs_data
 from quast_libs.icarus_parser import parse_contigs_fpath, parse_features_data, parse_cov_fpath, parse_genes_data
 from quast_libs.icarus_parser import parse_aligner_contig_report
 from quast_libs.icarus_utils import make_output_dir, group_references, format_cov_data, format_long_numbers, get_info_by_chr, \
-    get_assemblies, check_misassembled_blocks, Alignment  # Добавляем импорт класса Alignment
+    get_assemblies, check_misassembled_blocks
 
 try:
    from collections import OrderedDict
@@ -32,32 +33,6 @@ from quast_libs import reporting
 from quast_libs.log import get_logger
 logger = get_logger(qconfig.LOGGER_DEFAULT_NAME)
 
-#chm13.draft_v2.0.cen_mask.bed
-centromere_regions = {
-    'chr1': (121619169, 142242033),
-    'chr2': (92300802, 94695067),
-    'chr3': (90804701, 96415026),
-    'chr4': (49705154, 55303192),
-    'chr5': (46830042, 50962194),
-    'chr6': (58286706, 61058390),
-    'chr7': (60410644, 63714499),
-    'chr8': (44243546, 46325080),
-    'chr9': (44938599, 76694047),
-    'chr10': (39633793, 41926237),
-    'chr11': (51023358, 54476419),
-    'chr12': (34593492, 37202490),
-    'chr13': (0, 17508596),
-    'chr14': (0, 12708411),
-    'chr15': (0, 17694466),
-    'chr16': (35834066, 52219756),
-    'chr17': (23433372, 27571319),
-    'chr18': (15641581, 21121235),
-    'chr19': (24570766, 29769351),
-    'chr20': (26383658, 32969590),
-    'chr21': (0, 11306378),
-    'chr22': (0, 15711065),
-    'chrX': (57819763, 60927195)
-}
 
 def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
        cov_fpath=None, physical_cov_fpath=None, gc_fpath=None,
@@ -119,77 +94,20 @@ def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
             contigs = parse_contigs_fpath(contigs_fpath)
         else:
             report_fpath = contig_report_fpath_pattern % qutils.label_from_fpath_for_fname(contigs_fpath)
-            aligned_blocks, misassembled_id_to_structure, contigs, ambiguity_alignments = parse_aligner_contig_report(
-                report_fpath, list(reference_chromosomes.keys()), cumulative_ref_lengths)
+            aligned_blocks, misassembled_id_to_structure, contigs, ambiguity_alignments = parse_aligner_contig_report(report_fpath,
+                                                                                          list(reference_chromosomes.keys()), cumulative_ref_lengths)
             if not contigs:
                 contigs = parse_contigs_fpath(contigs_fpath)
             if aligned_blocks is None:
                 return None
             for block in aligned_blocks:
                 block.label = label
-
-            logger.info(f"Количество блоков до объединения: {len(aligned_blocks)}")
-
-            # Merge blocks
-            merged_aligned_blocks = merge_blocks_within_contig(aligned_blocks, threshold=50000)
-            logger.info(f"Количество блоков после объединения: {len(merged_aligned_blocks)}")
-            
-            # Filter blocks
-            filtered_blocks = [block for block in merged_aligned_blocks if (block.end - block.start) <= 1000]
-            merged_aligned_blocks = [block for block in merged_aligned_blocks if (block.end - block.start) > 1000]
-            logger.info(f"Количество блоков после фильтрации: {len(merged_aligned_blocks)}")
-
-            centromeric_blocks = []
-            for block in merged_aligned_blocks:
-                centromere_start, centromere_end = centromere_regions.get(block.ref_name, (None, None))
-                if centromere_start is not None and centromere_end is not None:
-                    if block.start <= centromere_end and block.end >= centromere_start:
-                        centromeric_blocks.append(block)
-
-            logger.info(f"Количество блоков, входящих в центромерную зону: {len(centromeric_blocks)}")
-
-            if centromeric_blocks:
-                centromere_first_block_start = min(block.start for block in centromeric_blocks)
-                centromere_last_block_end = max(block.end for block in centromeric_blocks)
-
-                centromere_block = MergedAlignment(
-                    name=centromeric_blocks[0].name,
-                    start=centromere_first_block_start,
-                    end=centromere_last_block_end,
-                    unshifted_start=centromeric_blocks[0].unshifted_start,
-                    unshifted_end=centromeric_blocks[-1].unshifted_end,
-                    is_rc=centromeric_blocks[0].is_rc,
-                    start_in_contig=centromeric_blocks[0].start_in_contig,
-                    end_in_contig=centromeric_blocks[-1].end_in_contig,
-                    position_in_ref=centromeric_blocks[0].position_in_ref,
-                    ref_name=centromeric_blocks[0].ref_name,
-                    idy=centromeric_blocks[0].idy,
-                    is_best_set=centromeric_blocks[0].is_best_set,
-                    label=centromeric_blocks[0].label
-                )
-
-                merged_aligned_blocks = [block for block in merged_aligned_blocks if block not in centromeric_blocks]
-
-                # Добавляем сплошной блок центромеры
-                merged_aligned_blocks.append(centromere_block)
-                #logger.info(f"Создан сплошной блок для центромеры на хромосоме {centromere_block.ref_name}: "
-                            #f"Позиции ({centromere_block.start}, {centromere_block.end})")
-
-            lists_of_aligned_blocks.append(merged_aligned_blocks)
-
-            structures_by_labels[label] = {}
-            for block in merged_aligned_blocks:
-                if isinstance(block, MergedAlignment):
-                    if block.name not in structures_by_labels[label]:
-                        structures_by_labels[label][block.name] = []
-                    structures_by_labels[label][block.name].append(block)
-                else:
-                    logger.error(f"Expected MergedAlignment object, but got {type(block)}")
-
-            contigs_by_assemblies[label] = contigs
-            
+            aligned_blocks = check_misassembled_blocks(aligned_blocks, misassembled_id_to_structure)
+            lists_of_aligned_blocks.append(aligned_blocks)
+            structures_by_labels[label] = misassembled_id_to_structure
             if qconfig.ambiguity_usage == 'all':
                 ambiguity_alignments_by_labels[label] = ambiguity_alignments
+        contigs_by_assemblies[label] = contigs
 
     if ref_fpath:
         features_data = parse_features_data(features, cumulative_ref_lengths, chr_names)
@@ -198,115 +116,24 @@ def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
     if reference_chromosomes and lists_of_aligned_blocks:
         assemblies = get_assemblies(contigs_fpaths, lists_of_aligned_blocks, virtual_genome_size, find_similar)
     if (assemblies or contigs_by_assemblies) and qconfig.create_icarus_html:
-        icarus_html_fpath = js_data_gen(
-            assemblies, contigs_fpaths, reference_chromosomes, output_dirpath, structures_by_labels,
-            contig_names_by_refs=contig_names_by_refs, ref_fpath=ref_fpath, stdout_pattern=stdout_pattern,
-            ambiguity_alignments_by_labels=ambiguity_alignments_by_labels, contigs_by_assemblies=contigs_by_assemblies,
-            features_data=features_data, gc_fpath=gc_fpath, cov_fpath=cov_fpath,
-            physical_cov_fpath=physical_cov_fpath, json_output_dir=json_output_dir)
+        icarus_html_fpath = js_data_gen(assemblies, contigs_fpaths, reference_chromosomes,
+                    output_dirpath, structures_by_labels, contig_names_by_refs=contig_names_by_refs, ref_fpath=ref_fpath, stdout_pattern=stdout_pattern,
+                    ambiguity_alignments_by_labels=ambiguity_alignments_by_labels, contigs_by_assemblies=contigs_by_assemblies,
+                    features_data=features_data,
+                    gc_fpath=gc_fpath, cov_fpath=cov_fpath, physical_cov_fpath=physical_cov_fpath, json_output_dir=json_output_dir)
     else:
         icarus_html_fpath = None
 
     return icarus_html_fpath
 
 
-class MergedAlignment(Alignment):
-    def __init__(self, *args, label=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.label = label
-        self.segments = [(self.start, self.end)]
-
-
-def merge_blocks_within_contig(blocks, threshold=50000):
-    blocks.sort(key=lambda x: x.start)
-    
-    merged_blocks = []
-    if not blocks:
-        return merged_blocks
-
-    current_block = MergedAlignment(
-        name=blocks[0].name,
-        start=blocks[0].start,
-        end=blocks[0].end,
-        unshifted_start=blocks[0].unshifted_start,
-        unshifted_end=blocks[0].unshifted_end,
-        is_rc=blocks[0].is_rc,
-        start_in_contig=blocks[0].start_in_contig,
-        end_in_contig=blocks[0].end_in_contig,
-        position_in_ref=blocks[0].position_in_ref,
-        ref_name=blocks[0].ref_name,
-        idy=blocks[0].idy,
-        is_best_set=blocks[0].is_best_set,
-        label=blocks[0].label
-    )
-
-    #logger.info(f"Начинаем объединение блоков с порогом {threshold} bp")
-
-    for i in range(1, len(blocks)):
-        next_block = blocks[i]
-        gap = next_block.start - current_block.end
-
-        if gap < 0:
-            merged_blocks.append(current_block)
-            
-            current_block = MergedAlignment(
-                name=next_block.name,
-                start=next_block.start,
-                end=next_block.end,
-                unshifted_start=next_block.unshifted_start,
-                unshifted_end=next_block.unshifted_end,
-                is_rc=next_block.is_rc,
-                start_in_contig=next_block.start_in_contig,
-                end_in_contig=next_block.end_in_contig,
-                position_in_ref=next_block.position_in_ref,
-                ref_name=next_block.ref_name,
-                idy=next_block.idy,
-                is_best_set=next_block.is_best_set,
-                label=next_block.label
-            )
-            continue
-
-        if next_block.name == current_block.name and gap <= threshold:
-            #logger.info(f"Объединяем блоки: текущий ({current_block.start}, {current_block.end}) и следующий ({next_block.start}, {next_block.end}), расстояние {gap} bp")
-            current_block.end = next_block.end
-            current_block.segments.append((next_block.start, next_block.end))
-        else:
-            merged_blocks.append(current_block)
-            #logger.info(f"Сохраняем блок ({current_block.start}, {current_block.end}), следующий блок на расстоянии {gap} bp, создаем новый блок.")
-            current_block = MergedAlignment(
-                name=next_block.name,
-                start=next_block.start,
-                end=next_block.end,
-                unshifted_start=next_block.unshifted_start,
-                unshifted_end=next_block.unshifted_end,
-                is_rc=next_block.is_rc,
-                start_in_contig=next_block.start_in_contig,
-                end_in_contig=next_block.end_in_contig,
-                position_in_ref=next_block.position_in_ref,
-                ref_name=next_block.ref_name,
-                idy=next_block.idy,
-                is_best_set=next_block.is_best_set,
-                label=next_block.label
-            )
-
-    merged_blocks.append(current_block)
-    #logger.info(f"Сохраняем последний блок ({current_block.start}, {current_block.end})")
-
-    return merged_blocks
-
-
-
-
 def natural_sort(string_):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
-
-
 
 
 def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, structures_by_labels,
                 contigs_by_assemblies, ambiguity_alignments_by_labels=None, contig_names_by_refs=None, ref_fpath=None,
                 stdout_pattern=None, features_data=None, gc_fpath=None, cov_fpath=None, physical_cov_fpath=None, json_output_dir=None):
-    
     chr_names = []
     if chromosomes_length and assemblies:
         chr_to_aligned_blocks = OrderedDict()
@@ -327,31 +154,13 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
             report.add_field(reporting.Fields.SIMILAR_CONTIGS, similar_correct)
             report.add_field(reporting.Fields.SIMILAR_MIS_BLOCKS, similar_misassembled)
 
-    data_str = []
-    for label, merged_blocks in structures_by_labels.items():  
-        for alignment_list in merged_blocks.values():
-            for alignment in alignment_list:                
-                if not isinstance(alignment, MergedAlignment):
-                    #logger.error(f"Expected MergedAlignment object, but got {type(alignment)}")                
-                    continue 
-                
-                merged_start = min(segment[0] for segment in alignment.segments)
-                merged_end = max(segment[1] for segment in alignment.segments)
-                
-                #logger.info(f"Добавление объединенного блока для визуализации: {alignment.name}, start: {merged_start}, end: {merged_end}, ref_name: {alignment.ref_name}")
-
-                data_str.append(
-                    f'{{name: "{alignment.name}", start: {merged_start}, end: {merged_end}, ref_name: "{alignment.ref_name}", label: "{alignment.label}", idy: {alignment.idy}}}'
-                )
-
-    #logger.debug(f"Generated data string for visualization: {data_str[:5]}... (showing first 5 entries)")
-
     main_menu_fpath = os.path.join(output_dirpath, qconfig.icarus_html_fname)
     output_all_files_dir_path = os.path.join(output_dirpath, qconfig.icarus_dirname)
     if not os.path.exists(output_all_files_dir_path):
         os.mkdir(output_all_files_dir_path)
 
     chr_full_names, contig_names_by_refs = group_references(chr_names, contig_names_by_refs, chromosomes_length, ref_fpath)
+
     cov_data, max_depth = parse_cov_fpath(cov_fpath, chr_names, chr_full_names, contig_names_by_refs)
     physical_cov_data, physical_max_depth = parse_cov_fpath(physical_cov_fpath, chr_names, chr_full_names, contig_names_by_refs)
     gc_data, max_gc = parse_cov_fpath(gc_fpath, chr_names, chr_full_names, contig_names_by_refs)
@@ -475,5 +284,4 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
     html_saver.save_icarus_html(main_menu_template_fpath, main_menu_fpath, main_data_dict)
     html_saver.save_icarus_links(output_dirpath, icarus_links)
 
-    return main_menu_fpath  
-
+    return main_menu_fpath
