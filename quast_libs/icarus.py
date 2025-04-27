@@ -137,38 +137,6 @@ def natural_sort(string_):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
 
 
-def parse_kmc_stats(output_dirpath):
-    kmc_stats = {}
-    kmers_report_tsv = os.path.join(output_dirpath, 'k_mer_stats', 'kmers_report.tsv')
-
-    if not os.path.exists(kmers_report_tsv):
-        logger.warning(f"KMC report file not found: {kmers_report_tsv}")
-        return kmc_stats
-
-    with open(kmers_report_tsv) as f:
-        lines = [line.strip() for line in f if line.strip()]
-
-        if len(lines) < 5:
-            logger.warning(f"KMC report {kmers_report_tsv} is too short.")
-            return kmc_stats
-
-        # Парсим как "ключ: значение" по строчкам
-        assembly_line = lines[0].split('\t')
-        if len(assembly_line) < 2:
-            logger.warning(f"KMC report {kmers_report_tsv} has unexpected format.")
-            return kmc_stats
-
-        chr_name = assembly_line[1]  # например, short_38_chromosomes
-
-        kmc_stats[chr_name] = {
-            'completeness': float(lines[1].split('\t')[1]),
-            'correct_length': float(lines[2].split('\t')[1]),
-            'misjoined_length': float(lines[3].split('\t')[1]),
-            'undefined_length': float(lines[4].split('\t')[1]),
-        }
-
-    return kmc_stats
-
 
 
 def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, structures_by_labels,
