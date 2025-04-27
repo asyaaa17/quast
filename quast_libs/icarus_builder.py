@@ -17,7 +17,7 @@ except ImportError:
 from quast_libs import qconfig, qutils, reporting
 from quast_libs.html_saver import html_saver
 from quast_libs.icarus_utils import Alignment, get_html_name, format_long_numbers, get_misassembly_for_alignment, parse_misassembly_info
-
+import json
 
 def get_assemblies_data(contigs_fpaths, icarus_dirpath, stdout_pattern, nx_marks):
     assemblies_n50 = defaultdict(dict)
@@ -183,6 +183,8 @@ def prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref
                     data_str.append('{name:"' + alignment.name + '",corr_start:' + str(alignment.start) + ',corr_end:' +
                                     str(alignment.end) + ',start:' + str(alignment.unshifted_start) + ',end:' +
                                     str(alignment.unshifted_end) + ',misassemblies:"' + alignment.misassemblies + '",mis_ends:"' + misassembled_ends + '"')
+
+ 
                     if alignment.similar:
                         data_str[-1] += ',similar:"True"'
                     if alignment.ambiguous:
@@ -191,6 +193,14 @@ def prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref
                         data_str[-1] += ',is_best:"True"'
                     if contig_more_unaligned:
                         data_str[-1] += ',more_unaligned:"True"'
+
+
+
+                    if contig_more_unaligned:
+                        data_str[-1] += ',more_unaligned:"True"'
+                    if contigs[alignment.name].contig_type:
+                        data_str[-1] += ',contig_type:"' + contigs[alignment.name].contig_type + '"'
+
 
                     aligned_assemblies.add(alignment.label)
                     if overlapped_contigs[alignment]:
@@ -250,19 +260,34 @@ def prepare_alignment_data_for_one_ref(chr, chr_full_names, chr_names_by_id, ref
     if contig_names_by_refs:
         data_str.append(''.join(links_to_chromosomes))
     data_str = '\n'.join(data_str)
+
     return alignment_viewer_fpath, data_str, contigs_structure_str, additional_assemblies_data, ms_selectors, num_misassemblies, aligned_assemblies
 
+import logging
 
+# Настраиваем логирование:
+logging.basicConfig(
+    filename='debug.txt',       # Имя файла, куда будут записываться логи
+    filemode='w',               # Перезаписывать файл при каждом запуске (или 'a' для добавления)
+    level=logging.DEBUG,        # Уровень логирования
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger(__name__)
 def add_contig(cum_length, contig, not_used_nx, assemblies_n50, assembly, contigs, contig_size_lines, num, structures_by_labels,
                only_nx=False, has_aligned_contigs=True):
     end_contig = cum_length + contig.size
     marks = []
     align = None
+    logger.debug("add_contig: Обработка континга %s (size=%s) в сборке %s", contig.name, contig.size, assembly)
+
     for nx in not_used_nx:
         if assemblies_n50[assembly][nx] == contig.size and \
                 (num + 1 >= len(contigs) or contigs[num + 1].size != contig.size):
             marks.append(nx)
     marks = ', '.join(marks)
+    logger.debug("add_contig: Для континга %s сформированы marks: %s", contig.name, marks)
+
     genes = ['{start:' + str(gene.start) + ',end:' + str(gene.end) + '}' for gene in contig.genes]
     if marks:
         not_used_nx = [nx for nx in not_used_nx if nx not in marks]
@@ -284,6 +309,8 @@ def add_contig(cum_length, contig, not_used_nx, assemblies_n50, assembly, contig
             contig.contig_type = 'unaligned'
         align = '{name:"' + contig.name + '",size:' + str(contig.size) + marks + ',contig_type: "' + contig.contig_type + \
                 '",structure:[' + ''.join(structure) + ']' + (',genes:[' + ','.join(genes) + ']' if qconfig.gene_finding else '') + '},'
+        logger.debug("add_contig: Сформированная строка для континга %s: %s", contig.name, align)
+
     return end_contig, contig_size_lines, align, not_used_nx
 
 
@@ -342,18 +369,24 @@ def get_contigs_data(contigs_by_assemblies, nx_marks, assemblies_n50, structures
                 assembly_len, contigs_sizes_lines, align, not_used_nx = add_contig(assembly_len, alignment, not_used_nx, assemblies_n50,
                                                                     assembly, contigs, contigs_sizes_lines, last_contig_num + i, structures_by_labels, only_nx=True)
         total_len = max(total_len, cum_length)
+        logger.debug("get_contigs_data: Сборка %s, total length=%s", assembly, cum_length)
+
         contigs_sizes_str[-1] = contigs_sizes_str[-1][:-1] + '];\n\n'
     contigs_sizes_str = '\n'.join(contigs_sizes_str)
     contigs_sizes_str += 'var contigLines = [' + ','.join(contigs_sizes_lines) + '];\n\n'
     contigs_sizes_str += 'var contigs_total_len = ' + str(total_len) + ';\n'
     contigs_sizes_str += 'var minContigSize = ' + str(min_contig_size) + ';'
     contig_viewer_data = contigs_sizes_str + '\n'.join(additional_data)
+    logger.debug("get_contigs_data: Итоговый JavaScript для contig_data:\n%s", contig_viewer_data)
+
     return contig_viewer_data, too_many_contigs
 
 
 def save_alignment_data_for_one_ref(chr_name, ref_contigs, ref_name, json_output_dir, alignment_viewer_fpath, data_str, ms_selectors,
                                     ref_data='', features_data='', assemblies_data='', contigs_structure_str='', additional_assemblies_data=''):
     alignment_viewer_template_fpath = html_saver.get_real_path(qconfig.icarus_viewers_template_fname)
+    print(f"Real path to alignment viewer template: {alignment_viewer_template_fpath}")
+
     data_dict = dict()
     chr_data = 'chromosome = "' + chr_name + '";\n'
     chromosomes = '","'.join(ref_contigs)
@@ -370,6 +403,8 @@ def save_alignment_data_for_one_ref(chr_name, ref_contigs, ref_name, json_output
     for (ms_type, ms_name, ms_count) in ms_selectors:
         checkbox = {'ms_type': ms_type, 'ms_name': ms_name, 'ms_count': ms_count}
         data_dict['misassemblies_checkboxes'].append(checkbox)
+    print("Misassemblies checkboxes data:", json.dumps(data_dict.get('misassemblies_checkboxes', [])))
+
     html_saver.save_icarus_html(alignment_viewer_template_fpath, alignment_viewer_fpath, data_dict)
     html_saver.save_icarus_data(json_output_dir, chr_name, 'ref_name')
     html_saver.save_icarus_data(json_output_dir, data_dict['data'], 'data_alignments')
