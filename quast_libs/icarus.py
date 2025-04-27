@@ -25,6 +25,9 @@ except ImportError:
 
 import os
 import re
+import json
+import logging
+
 from collections import defaultdict
 from quast_libs import qconfig, qutils, fastaparser, genome_analyzer
 from quast_libs.ca_utils.misc import ref_labels_by_chromosomes
@@ -33,6 +36,8 @@ import quast_libs.html_saver.html_saver as html_saver
 from quast_libs import reporting
 from quast_libs.log import get_logger
 logger = get_logger(qconfig.LOGGER_DEFAULT_NAME)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def do(contigs_fpaths, contig_report_fpath_pattern, output_dirpath, ref_fpath,
@@ -132,10 +137,47 @@ def natural_sort(string_):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
 
 
+def parse_kmc_stats(output_dirpath):
+    kmc_stats = {}
+    kmers_report_tsv = os.path.join(output_dirpath, 'k_mer_stats', 'kmers_report.tsv')
+
+    if not os.path.exists(kmers_report_tsv):
+        logger.warning(f"KMC report file not found: {kmers_report_tsv}")
+        return kmc_stats
+
+    with open(kmers_report_tsv) as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+        if len(lines) < 5:
+            logger.warning(f"KMC report {kmers_report_tsv} is too short.")
+            return kmc_stats
+
+        # Парсим как "ключ: значение" по строчкам
+        assembly_line = lines[0].split('\t')
+        if len(assembly_line) < 2:
+            logger.warning(f"KMC report {kmers_report_tsv} has unexpected format.")
+            return kmc_stats
+
+        chr_name = assembly_line[1]  # например, short_38_chromosomes
+
+        kmc_stats[chr_name] = {
+            'completeness': float(lines[1].split('\t')[1]),
+            'correct_length': float(lines[2].split('\t')[1]),
+            'misjoined_length': float(lines[3].split('\t')[1]),
+            'undefined_length': float(lines[4].split('\t')[1]),
+        }
+
+    return kmc_stats
+
+
+
 def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, structures_by_labels,
                 contigs_by_assemblies, ambiguity_alignments_by_labels=None, contig_names_by_refs=None, ref_fpath=None,
                 stdout_pattern=None, features_data=None, gc_fpath=None, cov_fpath=None, physical_cov_fpath=None, json_output_dir=None):
     chr_names = []
+    ms_selectors_all_chromosomes = {}
+
+
     if chromosomes_length and assemblies:
         chr_to_aligned_blocks = OrderedDict()
         chr_names = list(chromosomes_length.keys())
@@ -193,6 +235,11 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
     num_misassemblies = defaultdict(int)
     aligned_bases_by_chr = defaultdict(list)
     aligned_assemblies = defaultdict(set)
+
+    # Собираем все данные хромосом в один объект:
+    all_chromosomes_data = {}
+
+
     for i, chr in enumerate(chr_full_names):
         ref_contigs = ref_contigs_dict[chr]
         chr_lengths = chr_lengths_dict[chr]
@@ -216,10 +263,87 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
                                                contigs_by_assemblies, ambiguity_alignments_by_labels=ambiguity_alignments_by_labels,
                                                cov_data_str=cov_data_str, physical_cov_data_str=physical_cov_data_str, gc_data_str=gc_data_str,
                                                contig_names_by_refs=contig_names_by_refs, output_dir_path=output_all_files_dir_path)
+
         ref_name = qutils.name_from_fpath(ref_fpath)
         save_alignment_data_for_one_ref(chr, ref_contigs, ref_name, json_output_dir, alignment_viewer_fpath, ref_data_str, ms_selectors,
                                         ref_data=ref_data, features_data=features_data, assemblies_data=assemblies_data,
                                         contigs_structure_str=contigs_structure_str, additional_assemblies_data=additional_assemblies_data)
+        
+        ms_selectors_all_chromosomes[chr] = ms_selectors
+        
+ 
+        # Сохраняем данные для этой хромосомы во временный словарь
+        all_chromosomes_data[chr] = {
+            "alignment_data": ref_data_str,
+            "contigs_structure": contigs_structure_str,
+            "assemblies_data": additional_assemblies_data
+        }
+
+# Получаем данные для kmc_stats
+    kmc_stats = parse_kmc_stats(output_dirpath)
+    kmc_stats_str = 'var kmc_stats = ' + json.dumps(kmc_stats) + ';\n'
+
+
+    combined_str = '<script type="text/javascript">\n'
+    combined_str += kmc_stats_str  # 🛠 сначала вставляем kmc_stats
+    combined_str += (
+        'var references_by_id = {};\n'
+        'var chromosomes_len = {};\n'
+        'var contig_data = {};\n'
+        'var contig_lengths = {};\n'
+        'var contig_structures = {};\n'
+        'var assemblies_len = {};\n'
+        'var assemblies_contigs = {};\n'
+        'var assemblies_misassemblies = {};\n'
+        'var gc_data = {};\n'
+        'var max_gc = {};\n'
+        'var links_to_chromosomes = {};\n'
+        'var oneHtml = false;\n'
+        'var gc_window_size = 600;\n'
+    )
+
+
+    combined_str += ref_data + '\n'
+
+    for chr in chr_full_names:
+        chr_data = all_chromosomes_data[chr]
+        for var_name in ['chromosomes_len', 'contig_data', 'gc_data', 'max_gc', 'contig_lengths', 'contig_structures']:
+            chr_data["alignment_data"] = chr_data["alignment_data"].replace(f'var {var_name} = {{}};', '')
+ 
+        combined_str += chr_data["alignment_data"] + '\n'
+        combined_str += chr_data["contigs_structure"] + '\n'
+        combined_str += chr_data["assemblies_data"] + '\n'
+        
+    combined_str += '</script>\n'
+
+# Преобразуем словарь в список для шаблона
+    # Вместо цикла по каждой хромосоме
+    misassemblies_counter = defaultdict(int)
+    for chr_name, selectors in ms_selectors_all_chromosomes.items():
+        for ms_type, ms_name, ms_count in selectors:
+            misassemblies_counter[ms_type] += int(ms_count)
+
+    misassemblies_checkboxes_list = []
+    for ms_type, ms_count in misassemblies_counter.items():
+        misassemblies_checkboxes_list.append({
+            'ms_type': ms_type,
+            'ms_name': ms_type + ('s' if not ms_type.endswith('s') else ''),
+            'ms_count': ms_count
+            })
+
+
+
+    # Генерация HTML с объединёнными графиками
+    all_chr_template_fpath = html_saver.get_real_path("all_chromosomes_template.html")
+    all_chr_html_fpath = os.path.join(output_all_files_dir_path, "all_chromosomes.html")
+    html_saver.save_icarus_html(
+        all_chr_template_fpath,
+        all_chr_html_fpath,
+        {'title': 'All Chromosomes View', 'data': combined_str, 'misassemblies_checkboxes': misassemblies_checkboxes_list}
+
+    )
+
+
 
     contigs_sizes_str, too_many_contigs = get_contigs_data(contigs_by_assemblies, nx_marks, assemblies_n50, structures_by_labels,
                                                            contig_names_by_refs, chr_names, chr_full_names)
@@ -284,5 +408,7 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
             html_saver.save_icarus_data(json_output_dir, main_data_dict['one_reference'], 'menu_reference', as_text=False)
     html_saver.save_icarus_html(main_menu_template_fpath, main_menu_fpath, main_data_dict)
     html_saver.save_icarus_links(output_dirpath, icarus_links)
+
+
 
     return main_menu_fpath
