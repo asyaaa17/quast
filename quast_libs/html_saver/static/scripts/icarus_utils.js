@@ -4,7 +4,7 @@ var minCoverage = 10;
 var expandedLanes = [];
 
 function getBlockStructure(block) {
-    if (typeof(contig_structures) !== 'undefined') {
+    if (typeof (contig_structures) !== 'undefined') {
         var structure = contig_structures[block.assembly][block.name];
         for (var i = 0; i < structure.length; i++) {
             if (structure[i].chr) {
@@ -96,7 +96,7 @@ function getTranslate(block, selected_id, minExtent) {
 
 function getYForExpandedLanes(block) {
     lane = getExpandedLanesCount(block.lane);
-    if (expandedLanes.indexOf(block.lane) != -1 && typeof(block.nonOverlappingLane) != 'undefined') {
+    if (expandedLanes.indexOf(block.lane) != -1 && typeof (block.nonOverlappingLane) != 'undefined') {
         lane += block.nonOverlappingLane;
     }
     y = y_main(lane) + .25 * lanesInterval;
@@ -128,14 +128,14 @@ function changeInfo(block) {
         .remove();
 
     var contigInfo = 'Contig: ' + block.name;
-    if (!isContigSizePlot && typeof(contig_lengths) !== 'undefined') {
+    if (!isContigSizePlot && typeof (contig_lengths) !== 'undefined') {
         contigInfo += ' (' + contig_lengths[block.assembly][block.name] + ' bp)';
     }
     else if (block.size && block.contig_type != 'short_contigs') {
         contigInfo += ' (' + block.size + ' bp)';
     }
     info.append('p')
-        .style({'display': 'block', 'word-break': 'break-all', 'word-wrap': 'break-word'})
+        .style({ 'display': 'block', 'word-break': 'break-all', 'word-wrap': 'break-word' })
         .text(contigInfo, 280);
     var contigType;
     var blockStructure = getBlockStructure(block);
@@ -175,13 +175,13 @@ function changeInfo(block) {
         info.append('p')
             .text('Type: ' + contigType.replace('_', ' '));
 
-    var appendPositionElement = function(curBlock, selectedBlock, whereAppend, prevBlock, prevChr, isExpanded) {
+    var appendPositionElement = function (curBlock, selectedBlock, whereAppend, prevBlock, prevChr, isExpanded) {
         if (!curBlock) return;
         var whereAppendBlock = whereAppend;
         if (isExpanded) {
             whereAppendBlock = whereAppend.append('p')
                 .attr('class', 'head_plus collapsed')
-                .on('click', function() {
+                .on('click', function () {
                     openClose(whereAppendBlock[0][0]);
                 });
         }
@@ -211,9 +211,9 @@ function changeInfo(block) {
     var structure = blockStructure ? blockStructure : block.best_group;
     if (structure && structure.length > 0) {
         var blocksMenu = info.append('p');
-        var blocksCount = structure.filter(function(nextBlock) {
-                if (nextBlock.contig_type != "M") return nextBlock;
-            }).length;
+        var blocksCount = structure.filter(function (nextBlock) {
+            if (nextBlock.contig_type != "M") return nextBlock;
+        }).length;
         var blocksName = 'Blocks: ';
         var isAmbiguous = (block.ambiguous || block.contig_type == 'ambiguous');
         if (isAmbiguous)
@@ -226,7 +226,7 @@ function changeInfo(block) {
         if (isAmbiguous)
             blocksMenuInfo.append('span').text(blocksText);
         blocksMenuInfo.attr('class', 'head');
-        blocksMenu.on('click', function() {
+        blocksMenu.on('click', function () {
             openClose(blocksMenu[0][0]);
         });
         blocksMenuInfo.on('click', function () {
@@ -267,9 +267,9 @@ function changeInfo(block) {
         else {
             genesInfo.attr('class', 'head');
             genesMenu.attr('class', 'head_plus collapsed')
-                     .on('click', function() {
-                         openClose(genesMenu[0][0]);
-                     });
+                .on('click', function () {
+                    openClose(genesMenu[0][0]);
+                });
             genesInfo.on('click', function () {
                 d3.event.stopPropagation();
             });
@@ -285,9 +285,9 @@ function changeInfo(block) {
         var overlapsText = 'Overlaps with other contigs: ' + block.overlaps.length;
         var overlapsMenuInfo = overlapsMenu.append('span').text(overlapsText);
         overlapsMenuInfo.attr('class', 'head');
-        overlapsMenu.on('click', function() {
+        overlapsMenu.on('click', function () {
             openClose(overlapsMenu[0][0]);
-         });
+        });
         overlapsMenuInfo.on('click', function () {
             d3.event.stopPropagation();
         });
@@ -301,16 +301,16 @@ function changeInfo(block) {
     }
     if (block.ambiguous_alignments && block.ambiguous_alignments.length > 0) {
         var ambiguousMenu = info.append('p').attr('class', 'head_plus collapsed');
-        var ambiguousText = 'Blocks of alternative sets: ' + block.ambiguous_alignments.filter(function(nextBlock) {
-                if (nextBlock.contig_type != "M") return nextBlock;
-            }).length;
+        var ambiguousText = 'Blocks of alternative sets: ' + block.ambiguous_alignments.filter(function (nextBlock) {
+            if (nextBlock.contig_type != "M") return nextBlock;
+        }).length;
         var ambiguousMenuInfo = ambiguousMenu.append('span').text(ambiguousText);
         ambiguousMenuInfo.attr('class', 'head');
-        ambiguousMenu.on('click', function() {
+        ambiguousMenu.on('click', function () {
             openClose(ambiguousMenu[0][0]);
         });
-        ambiguousMenuInfo.on('click', function() {
-                d3.event.stopPropagation();
+        ambiguousMenuInfo.on('click', function () {
+            d3.event.stopPropagation();
         });
 
         var ambiguousInfo = ambiguousMenuInfo.append('p').attr('class', 'close');
@@ -333,8 +333,8 @@ function appendBlock(whereAppendBlock, numBlock, curBlock, selectedBlock, prevBl
 
     var format = function (val) {
         val = val.toString();
-        for (var i = 3; i < val.length; i += 4 )
-            val = val.slice(0 , val.length - i) + ' ' + val.slice(length - i, val.length);
+        for (var i = 3; i < val.length; i += 4)
+            val = val.slice(0, val.length - i) + ' ' + val.slice(length - i, val.length);
         return val;
     };
 
@@ -346,7 +346,7 @@ function appendBlock(whereAppendBlock, numBlock, curBlock, selectedBlock, prevBl
     });
     if (isExpanded && !isContigSizePlot) {
         blockMark = blockDiv.append('div')
-                            .attr('id', 'circle' + selectedBlock.corr_start + '_' + selectedBlock.corr_end);
+            .attr('id', 'circle' + selectedBlock.corr_start + '_' + selectedBlock.corr_end);
         if (selectedBlock.corr_start == prevBlock.corr_start && selectedBlock.corr_end == prevBlock.corr_end && curBlock.chr == prevChr)
             blockMark.attr('class', 'block_circle selected');
         else
@@ -354,8 +354,8 @@ function appendBlock(whereAppendBlock, numBlock, curBlock, selectedBlock, prevBl
     }
     var blockInfo = blockDiv.append('text');
     blockInfo.append('tspan')
-            .attr('x', -50)
-            .text('Position: ');
+        .attr('x', -50)
+        .text('Position: ');
     if (isContigSizePlot) var positionLink = blockInfo.append('a');
     else positionLink = blockInfo.append('tspan');
     positionLink.attr('id', 'position_link' + numBlock)
@@ -391,7 +391,7 @@ function appendBlock(whereAppendBlock, numBlock, curBlock, selectedBlock, prevBl
         if (curBlock.start_in_ref) {
             var link = hasChromosomeLinks ? links_to_chromosomes[curBlock.chr] : 'alignment_viewer';
             link += '.html';
-            link += '?assembly=' + assembly + '&contig=' + curBlock.contig  + '&start=' + curBlock.start_in_ref + '&end=' + curBlock.end_in_ref;
+            link += '?assembly=' + assembly + '&contig=' + curBlock.contig + '&start=' + curBlock.start_in_ref + '&end=' + curBlock.end_in_ref;
             positionLink.attr('href', link)
                 .attr('target', '_blank')
                 .style('text-decoration', 'underline')
@@ -412,7 +412,7 @@ function appendBlock(whereAppendBlock, numBlock, curBlock, selectedBlock, prevBl
         if (chrContigs.indexOf(curBlock.chr) == -1) {
             var link = hasChromosomeLinks ? links_to_chromosomes[curBlock.chr] : curBlock.chr;
             link += '.html';
-            link += '?assembly=' + assembly + '&contig=' + selectedBlock.contig  + '&start=' + curBlock.corr_start + '&end=' + curBlock.corr_end;
+            link += '?assembly=' + assembly + '&contig=' + selectedBlock.contig + '&start=' + curBlock.corr_start + '&end=' + curBlock.corr_end;
             blockInfo.append('a')
                 .attr('href', link)
                 .attr('target', '_blank')
@@ -428,17 +428,17 @@ function appendBlock(whereAppendBlock, numBlock, curBlock, selectedBlock, prevBl
 
     if (curBlock.start) {
         var referenceText = ['reference:', format(curBlock.start), ndash, format(curBlock.end),
-                    '(' + format(Math.abs(curBlock.end - curBlock.start) + 1) + ')', 'bp'].join(' ');
+            '(' + format(Math.abs(curBlock.end - curBlock.start) + 1) + ')', 'bp'].join(' ');
         blockInfo.append('p').text(referenceText);
     }
-    var contigText = ['contig:', format(curBlock.start_in_contig), ndash,  format(curBlock.end_in_contig),
-            '(' + format(Math.abs(curBlock.end_in_contig - curBlock.start_in_contig) + 1) + ')', 'bp'].join(' ');
+    var contigText = ['contig:', format(curBlock.start_in_contig), ndash, format(curBlock.end_in_contig),
+        '(' + format(Math.abs(curBlock.end_in_contig - curBlock.start_in_contig) + 1) + ')', 'bp'].join(' ');
     blockInfo.append('p').text(contigText);
     if (curBlock.IDY)
         blockInfo.append('p').text(['IDY:', curBlock.IDY, '%'].join(' '));
 }
 
-function formatPosition(start, end, tickValue){
+function formatPosition(start, end, tickValue) {
     return [formatValue(start, tickValue), ndash, formatValue(end, tickValue),
         tickValue, ' '].join(' ');
 }
@@ -522,7 +522,7 @@ function addArrow(x, y, selected, additionalClass) {
     var verticalShift = -7;
     var arrowClass = selected ? 'arrow_selected' : 'arrow';
     mini.append('g')
-        .attr('transform', 'translate(' + x_mini(x) + ',' + verticalShift +')')
+        .attr('transform', 'translate(' + x_mini(x) + ',' + verticalShift + ')')
         .attr('class', 'arrow')
         .append("svg:path")
         .attr("d", 'M0,0V' + (Math.abs(verticalShift) + 1 + y * miniLanesHeight))
@@ -539,7 +539,7 @@ function addArrow(x, y, selected, additionalClass) {
 
 function refreshMisArrows() {
     var showMisSelectors = document.getElementsByClassName('show_mis_span');
-    for(var i = 0; i < showMisSelectors.length; i++) {
+    for (var i = 0; i < showMisSelectors.length; i++) {
         if ($(showMisSelectors[i]).text() == '(hide)') {
             assemblyNum = parseInt(showMisSelectors[i].getAttribute("class").split(' ')[1]);
             showMisassembliesArrows(assemblyNum);
@@ -548,35 +548,64 @@ function refreshMisArrows() {
 }
 
 function showMisassemblies() {
+    console.log("---- showMisassemblies() START ----");
     for (var numItem = 0; numItem < items.length; numItem++) {
         if (items[numItem].misassemblies) {
+            console.log("Before changeMisassembledStatus, item:", items[numItem]);
             items[numItem] = changeMisassembledStatus(items[numItem]);
-            if (items[numItem].triangles && items[numItem].triangles.length > 0)
+            console.log("After changeMisassembledStatus, item:", items[numItem]);
+            if (items[numItem].triangles && items[numItem].triangles.length > 0) {
                 for (var i = 0; i < items[numItem].triangles.length; i++) {
-                    if (!items[numItem].triangles[i].objClass) items[numItem].triangles[i].objClass = "misassembled";
+                    if (!items[numItem].triangles[i].objClass) {
+                        items[numItem].triangles[i].objClass = "misassembled";
+                        console.log("Triangle default objClass set to 'misassembled' for triangle:", items[numItem].triangles[i]);
+                    }
+                    console.log("Before changeMisassembledStatus on triangle:", items[numItem].triangles[i]);
                     items[numItem].triangles[i] = changeMisassembledStatus(items[numItem].triangles[i]);
+                    console.log("After changeMisassembledStatus on triangle:", items[numItem].triangles[i]);
                 }
+            }
         }
     }
+    console.log("Items after processing misassemblies:", items);
     hideUncheckedMisassemblies(itemsContainer);
     hideUncheckedMisassemblies(chart);
     refreshMisArrows();
+    console.log("---- showMisassemblies() END ----");
 }
 
+
 function changeMisassembledStatus(block) {
+    // Инициализация значений по умолчанию
+    if (typeof block.misassembled === 'undefined') {
+        block.misassembled = "False";
+    }
+    if (typeof block.objClass === 'undefined') {
+        block.objClass = "disabled";
+    }
+
     var msTypes = block.misassemblies.split(';');
+    console.log("Processing block:", block.name, "with misassemblies:", msTypes);
     var isMisassembled = "False";
     for (var i = 0; i < msTypes.length; i++) {
-        if (msTypes[i] && document.getElementById(msTypes[i]).checked) isMisassembled = "True";
+        var ms = msTypes[i].trim();
+        var checkbox = document.getElementById(ms);
+        console.log("Checking misassembly type:", ms, "checkbox found:", checkbox, "checked:", checkbox ? checkbox.checked : "N/A");
+        if (ms && checkbox && checkbox.checked) {
+            isMisassembled = "True";
+        }
     }
-    if (isMisassembled == "True" && block.misassembled == "False") {
+    console.log("Determined isMisassembled:", isMisassembled, "for block:", block.name);
+    if (isMisassembled === "True" && block.misassembled === "False") {
         block.objClass = block.objClass.replace("disabled", "misassembled");
-    }
-    else if (isMisassembled == "False")
+    } else if (isMisassembled === "False") {
         block.objClass = block.objClass.replace(/\bmisassembled\b/g, "disabled");
+    }
     block.misassembled = isMisassembled;
+    console.log("Final objClass for block", block.name, ":", block.objClass);
     return block;
 }
+
 
 function hideUncheckedMisassemblies(track) {
     track.selectAll('.block')
@@ -615,10 +644,10 @@ function addTooltipTspan(displayedText, tspan, width) {
     var visibleLabel = getVisibleText(displayedText, width);
     if (visibleLabel.length < displayedText.length) {
         var fullName = displayedText;
-        tspan.on('mouseover',function(d) {
+        tspan.on('mouseover', function (d) {
             addTooltip(d, '<span class="lane_tooltip">' + fullName + '</span>');
         });
-        tspan.on('mouseout',function(d) {
+        tspan.on('mouseout', function (d) {
             removeTooltip();
         });
         displayedText = visibleLabel;
@@ -629,7 +658,7 @@ function addTooltipTspan(displayedText, tspan, width) {
 function wrap(text, width, cutText, addStdoutLink, offsetX, separator) {
     var stdoutLinkWidth = getSize('(text)') + 10;
     var showMisassembliesWidth = getSize('(show)');
-    text.each(function() {
+    text.each(function () {
         var text = d3.select(this),
             words = text.text().split(separator).reverse(),
             word,
@@ -663,7 +692,7 @@ function wrap(text, width, cutText, addStdoutLink, offsetX, separator) {
                         .attr('fill', '#0000EE')
                         .style("cursor", "pointer")
                         .text('(text)')
-                        .on('click', function(d) {
+                        .on('click', function (d) {
                             window.open(d.link, '_blank');
                             d3.event.stopPropagation();
                         });
@@ -681,10 +710,10 @@ function wrap(text, width, cutText, addStdoutLink, offsetX, separator) {
                     var extMisassemblies = misassemblies.split(' ')[1];
                     var localMisassemblies = msWords[1];
                     var msTooltip = extMisassemblies + ' extensive + ' + localMisassemblies + ' local misassemblies';
-                    tspan.on('mouseover',function(d) {
+                    tspan.on('mouseover', function (d) {
                         addTooltip(d, '<span class="lane_tooltip">' + msTooltip + '</span>');
                     });
-                    tspan.on('mouseout',function(d) {
+                    tspan.on('mouseout', function (d) {
                         removeTooltip();
                     });
                     text.append('tspan')
@@ -692,7 +721,7 @@ function wrap(text, width, cutText, addStdoutLink, offsetX, separator) {
                         .attr('y', y)
                         .attr('dy', lineNumber * lineHeight + dy + 'em')
                         .attr('fill', '#0000EE')
-                        .attr('class', function(d) {
+                        .attr('class', function (d) {
                             return 'show_mis_span ' + d.id;
                         })
                         .style('cursor', 'pointer')
@@ -766,7 +795,7 @@ function getText(textItem, minExtent, maxExtent) {
 function addTooltip(feature, tooltipText, event) {
     if (!tooltipText)
         tooltipText = feature ? '<strong>' + (feature.name ? feature.name + ',' : '') + '</strong> <span>' +
-        (feature.id ? ' ID=' + feature.id + ',' : '') + ' coordinates: ' + feature.start + '-' + feature.end + '</span>' : '';
+            (feature.id ? ' ID=' + feature.id + ',' : '') + ' coordinates: ' + feature.start + '-' + feature.end + '</span>' : '';
     var eventX = event ? event.pageX : d3.event.pageX - 50;
     var eventY = event ? event.pageY + 5 : d3.event.pageY + 5;
     if (tooltipText && featureTip.html() != tooltipText) {
@@ -821,7 +850,7 @@ function getVisibleText(fullText, l, lenChromosome) {
     else t = fullText;
     if (lenChromosome && t.length == fullText.length) {
         var t_plus_len = fullText + ' (' + lenChromosome + ' bp)';
-        if ((t_plus_len.length - 2)* letterSize <= l) return t_plus_len;
+        if ((t_plus_len.length - 2) * letterSize <= l) return t_plus_len;
     }
     return (t.length < fullText.length && t.length <= 3 ? '' : t + (t.length >= fullText.length ? '' : '...'));
 }
@@ -857,20 +886,20 @@ function disglow() {
 function selectFeature() {
     d3.select(this)
         .transition()
-        .style({'opacity': .5})
+        .style({ 'opacity': .5 })
         .select('rect');
 }
 
 function deselectFeature() {
     d3.select(this)
         .transition()
-        .style({'opacity': 1})
+        .style({ 'opacity': 1 })
         .select('rect');
 }
 
 function openClose(d) {
     var c = d3.select(d);
-    if (c.attr('class') == 'head_plus expanded' || c.attr('class') == 'head_plus collapsed' ){
+    if (c.attr('class') == 'head_plus expanded' || c.attr('class') == 'head_plus collapsed') {
         c.attr('class', c.attr('class') == 'head_plus expanded' ? 'head_plus collapsed' : 'head_plus expanded');
         p = c.select('span').select('p');
         if (p.attr('class') == 'close') {
@@ -893,9 +922,12 @@ function getContigColorByMark(mark) {
     else if (mark.startsWith('N') && 'Nx' in contigsColors) {
         return contigsColors['Nx'];
     }
+
     else {
         return '#000000';
     }
+    console.log("🎨 Цвет для метки:", mark, "=>", color);
+
 }
 
 function addGradient(d, marks, gradientExists, smoothGradient) {
@@ -904,37 +936,40 @@ function addGradient(d, marks, gradientExists, smoothGradient) {
     marks = marks.split(', ');
     if (marks.length == 1) return getContigColorByMark(marks[0]);
     if (gradientExists) return 'url(#' + gradientId + ')';
-    var gradient = chart.append("svg:defs")
-        .append("svg:linearGradient")
+    var defs = chart.select("defs");
+    if (defs.empty()) {
+        defs = chart.append("defs");
+    }
+    var gradient = defs.append("linearGradient")
         .attr("id", gradientId);
-    if (!smoothGradient){
+    if (!smoothGradient) {
         gradient.attr("x1", "0%")
             .attr("y1", "0%")
             .attr("x2", "0%")
             .attr("y2", "100%");
-        gradientSteps = ["50%", "50%"];
-        for (var m = 0; m < marks.length; m++)
-            gradient.append("svg:stop")
+        var gradientSteps = ["50%", "50%"];
+        for (var m = 0; m < marks.length; m++) {
+            gradient.append("stop")
                 .attr("offset", gradientSteps[m])
                 .attr("stop-color", getContigColorByMark(marks[m]))
                 .attr("stop-opacity", 1);
-    }
-    else {
+        }
+    } else {
         gradient.attr("x1", "0%")
-                .attr("y1", "0%")
-                .attr("x2", "100%")
-                .attr("y2", "100%");
+            .attr("y1", "0%")
+            .attr("x2", "100%")
+            .attr("y2", "100%");
         var colors = [];
-        for (var m = 0; m < marks.length; m++)
-            colors.push(getContigColorByMark(marks[m]))
+        for (var m = 0; m < marks.length; m++) {
+            colors.push(getContigColorByMark(marks[m]));
+        }
         var colorScale = d3.scale.linear().range(colors);
         gradient.selectAll("stop")
-                .data(colorScale.range())
-                .enter().append("stop")
-                .attr("offset", function(d,i) { return i / (colorScale.range().length - 1); })
-                .attr("stop-color", function(d) { return d; });
+            .data(colorScale.range())
+            .enter().append("stop")
+            .attr("offset", function (d, i) { return i / (colorScale.range().length - 1); })
+            .attr("stop-color", function (d) { return d; });
     }
-
     return 'url(#' + gradientId + ')';
 }
 
@@ -945,7 +980,7 @@ function getNextMaxCovValue(maxY, ticksVals) {
 }
 
 function getLogScaleYValues(scale) {
-    return function(tickValue) {
+    return function (tickValue) {
         var i = 0;
         for (; Math.pow(10, i) < tickValue; ++i);
         if (tickValue == Math.pow(10, i) && tickValue <= scale.domain()[0]) return tickValue;
@@ -953,7 +988,7 @@ function getLogScaleYValues(scale) {
 };
 
 function changeMaxMainCoverage(zoomIn) {
-    if (zoomIn){
+    if (zoomIn) {
         totalMaxYMain = Math.max(totalMaxYMain / 2, minCoverage);
         if (totalMaxYMain == minCoverage) {
             document.getElementById('zoomInCoverageMain').disabled = true;
@@ -973,7 +1008,7 @@ function changeMaxMainCoverage(zoomIn) {
 }
 
 function changeMaxMiniCoverage(zoomIn) {
-    if (zoomIn){
+    if (zoomIn) {
         totalMaxYMini = Math.max(totalMaxYMini / 2, minCoverage);
         if (totalMaxYMini == minCoverage) {
             document.getElementById('zoomInCoverageMini').disabled = true;
@@ -1025,7 +1060,7 @@ function setYScaleCoverage(maxValue) {
         maxValue = y_max;
     }
     y_cov_scale.domain([maxValue, .1])
-               .range([0, coverageHeight]);
+        .range([0, coverageHeight]);
     return y_cov_scale;
 }
 
@@ -1090,16 +1125,14 @@ function getNumberOfContigs(x) {
 }
 
 function getScrollBarWidth() {
-    var $outer = $('<div>').css({visibility: 'hidden', width: 100, overflow: 'scroll'}).appendTo('body'),
-        widthWithScroll = $('<div>').css({width: '100%'}).appendTo($outer).outerWidth();
+    var $outer = $('<div>').css({ visibility: 'hidden', width: 100, overflow: 'scroll' }).appendTo('body'),
+        widthWithScroll = $('<div>').css({ width: '100%' }).appendTo($outer).outerWidth();
     $outer.remove();
     return 100 - widthWithScroll;
 }
 
-$.fn.noScrollParent = function()
-{
-    this.bind('mousewheel DOMMouseScroll',function(e)
-    {
+$.fn.noScrollParent = function () {
+    this.bind('mousewheel DOMMouseScroll', function (e) {
         var delta = e.originalEvent.wheelDelta || -e.originalEvent.detail;
         if (delta > 0 && $(this).scrollTop() <= 0)
             return false;
