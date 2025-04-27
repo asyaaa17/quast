@@ -177,40 +177,11 @@ function updateInfoPanel(blockData) {
 
 
 
-function renderKmcStatsTable() {
-    if (typeof kmc_stats === 'undefined') {
-        console.error("Нет данных kmc_stats для отображения.");
-        return;
-    }
-
-    var panel = document.getElementById('kmc_stats_panel');
-    if (!panel) {
-        console.error("kmc_stats_panel не найден на странице.");
-        return;
-    }
-
-    let content = "";
-
-    for (var chr in kmc_stats) {
-        var stats = kmc_stats[chr];
-        content += `<div style="margin-bottom: 10px;">`;
-        content += `<b>Assembly:</b> ${chr}<br/>`;
-        content += `<b>Completeness:</b> ${stats.completeness.toFixed(1)}%<br/>`;
-        content += `<b>Correct length:</b> ${stats.correct_length.toFixed(1)}%<br/>`;
-        content += `<b>Misjoined length:</b> ${stats.misjoined_length.toFixed(1)}%<br/>`;
-        content += `<b>Undefined length:</b> ${stats.undefined_length.toFixed(1)}%<br/>`;
-        content += `</div>`;
-    }
-
-    panel.innerHTML = content;
-}
-
 
 
 
 
 document.addEventListener("DOMContentLoaded", function () {
     initAllChromosomesVisualization();
-    renderKmcStatsTable(); // 🛠 Вставляем таблицу с KMC
 
 });
