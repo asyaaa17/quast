@@ -279,13 +279,8 @@ def js_data_gen(assemblies, contigs_fpaths, chromosomes_length, output_dirpath, 
             "assemblies_data": additional_assemblies_data
         }
 
-# Получаем данные для kmc_stats
-    kmc_stats = parse_kmc_stats(output_dirpath)
-    kmc_stats_str = 'var kmc_stats = ' + json.dumps(kmc_stats) + ';\n'
-
 
     combined_str = '<script type="text/javascript">\n'
-    combined_str += kmc_stats_str  # 🛠 сначала вставляем kmc_stats
     combined_str += (
         'var references_by_id = {};\n'
         'var chromosomes_len = {};\n'
